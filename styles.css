@@ -1,0 +1,52 @@
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+body { background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+.container { background: #ffffff; width: 100%; max-width: 500px; padding: 40px 30px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1); text-align: center; display: flex; flex-direction: column; gap: 15px; }
+.hidden { display: none !important; }
+h2 { color: #2c3e50; margin-bottom: 5px; word-wrap: break-word; }
+.subtitle { color: #7f8c8d; margin-bottom: 15px; }
+
+input[type="text"], input[type="email"], input[type="password"] {
+    width: 100%; padding: 12px 15px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 6px; font-size: 16px; transition: border-color 0.3s;
+}
+input:focus, input[type="date"]:focus { outline: none; border-color: #3498db; box-shadow: 0 0 5px rgba(52, 152, 219, 0.3); }
+#pin-input { font-size: 40px; text-align: center; letter-spacing: 15px; padding: 20px; height: 90px; }
+
+button { cursor: pointer; border: none; border-radius: 6px; padding: 12px 20px; font-size: 16px; font-weight: bold; transition: all 0.2s; }
+button:active { transform: scale(0.98); }
+.btn-primary { background-color: #3498db; color: white; }
+.btn-primary:hover { background-color: #2980b9; }
+.btn-large { padding: 15px; font-size: 18px; background-color: #2ecc71; width: 100%; }
+.btn-large:hover { background-color: #27ae60; }
+.btn-secondary { background-color: #ecf0f1; color: #2c3e50; }
+.btn-secondary:hover { background-color: #bdc3c7; }
+.btn-danger { background-color: #e74c3c; color: white; }
+.btn-danger:hover { background-color: #c0392b; }
+.btn-warning { background-color: #f39c12; color: white; }
+.btn-warning:hover { background-color: #e67e22; }
+
+/* Botones de acción pequeños para la tabla */
+.btn-action { padding: 5px 10px; font-size: 12px; margin: 2px; }
+
+.admin-menu { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; flex-wrap: wrap; }
+.btn-tab { background-color: #ecf0f1; color: #7f8c8d; border-radius: 20px; padding: 10px 20px; }
+.btn-tab:hover { background-color: #bdc3c7; }
+.active-tab { background-color: #3498db; color: white; }
+
+.footer-buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+.msg-status { min-height: 24px; font-weight: bold; margin-top: 10px; padding: 10px; border-radius: 6px; word-wrap: break-word; }
+.msg-error { color: #e74c3c; font-size: 14px; margin-top: -5px; }
+hr { border: 0; height: 1px; background: #eee; margin: 20px 0; }
+
+/* Tabla Matriz / Excel */
+.report-table { width: 100%; border-collapse: collapse; font-size: 14px; background-color: white; }
+.report-table th, .report-table td { border: 1px solid #bdc3c7; padding: 10px; text-align: center; white-space: nowrap; }
+.report-table th { background-color: #2c3e50; color: white; position: sticky; top: 0; z-index: 10; }
+.status-asistio { background-color: #d5f5e3; color: #27ae60; font-weight: bold; }
+.status-permiso { background-color: #fdebd0; color: #f39c12; font-weight: bold; }
+.status-falta { background-color: #fadbd8; color: #c0392b; font-weight: bold; }
+.col-total { font-weight: bold; background-color: #f4f6f7; }
+
+/* Inmovilizar Paneles */
+.report-table th:nth-child(2), .report-table td:nth-child(2) { position: sticky; left: 0; z-index: 5; box-shadow: 2px 0 5px rgba(0,0,0,0.1); }
+.report-table td:nth-child(2) { background-color: #ffffff; }
+.report-table th:nth-child(2) { background-color: #2c3e50; z-index: 15; }

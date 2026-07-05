@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro de Asistencia Web</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <div id="login-container" class="container">
+        <h2>Acceso de Administrador</h2>
+        <input type="email" id="email" placeholder="Correo electrónico" required autocomplete="email">
+        <input type="password" id="password" placeholder="Contraseña" required>
+        <button id="btn-login" class="btn-primary">Iniciar Sesión</button>
+        <p id="login-msg" class="msg-error"></p>
+    </div>
+
+    <div id="kiosco-container" class="container hidden">
+        <h2>Control de Asistencia</h2>
+        
+        <div id="bloque-ingreso">
+            <p class="subtitle">Ingrese su PIN de 3 dígitos</p>
+            <input type="text" id="pin-input" maxlength="3" autocomplete="off" autofocus placeholder="123">
+            <button id="btn-marcar" class="btn-primary btn-large">Verificar PIN</button>
+        </div>
+
+        <div id="bloque-confirmacion" class="hidden" style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; border: 2px dashed #bdc3c7;">
+            <p style="color: #7f8c8d; margin-bottom: 5px; font-size: 14px;">Confirmación de identidad:</p>
+            <h3 id="nombre-confirmacion" style="color: #2c3e50; margin-bottom: 15px; font-size: 22px;"></h3>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="btn-si" class="btn-primary" style="width: 120px; background-color: #27ae60;">✅ Sí, soy yo</button>
+                <button id="btn-no" class="btn-danger" style="width: 120px;">❌ No</button>
+            </div>
+        </div>
+        
+        <div id="status-msg" class="msg-status"></div>
+
+        <div class="footer-buttons">
+            <button id="btn-ir-admin" class="btn-secondary">Panel de Administrador</button>
+            <button id="btn-logout" class="btn-danger">Cerrar Sesión</button>
+        </div>
+    </div>
+
+    <div id="admin-container" class="container hidden" style="max-width: 95%;">
+        <h2>Panel Maestro</h2>
+        
+        <div class="admin-menu">
+            <button id="tab-nuevo" class="btn-tab active-tab">Nuevo Docente</button>
+            <button id="tab-permiso" class="btn-tab">Registrar Permiso</button>
+            <button id="tab-reporte" class="btn-tab">Reportes y Gestión</button>
+        </div>
+
+        <div id="sec-nuevo" class="admin-section">
+            <h3 class="subtitle">Registrar Nuevo Docente</h3>
+            <div class="form-group" style="display: flex; gap:10px; justify-content: center;">
+                <input type="text" id="nuevo-nombres" placeholder="Nombres" required autocomplete="off">
+                <input type="text" id="nuevo-apellidos" placeholder="Apellidos" required autocomplete="off">
+            </div>
+            <button id="btn-guardar-docente" class="btn-primary" style="width: 100%;">Guardar y Generar PIN</button>
+            <div id="admin-msg" class="msg-status"></div>
+        </div>
+
+        <div id="sec-permiso" class="admin-section hidden">
+            <h3 class="subtitle">Registrar Permiso por Ausencia</h3>
+            <p style="margin-bottom: 15px; color: #555;">Ingrese el PIN y seleccione el sábado correspondiente:</p>
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 15px;">
+                <input type="text" id="pin-permiso" maxlength="3" placeholder="PIN (***)" style="width: 150px; text-align:center; font-size: 24px; letter-spacing: 5px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label for="fecha-permiso" style="font-weight: bold; color: #2c3e50;">Para el sábado:</label>
+                    <input type="date" id="fecha-permiso" style="padding: 8px; border-radius: 6px; border: 1px solid #ccc; font-size: 16px;">
+                </div>
+            </div>
+            <button id="btn-marcar-permiso" class="btn-warning" style="width: 100%; margin-top: 20px;">Otorgar Permiso (Naranja)</button>
+            <div id="permiso-msg" class="msg-status"></div>
+        </div>
+
+        <div id="sec-reporte" class="admin-section hidden">
+            <h3 class="subtitle">Visor de Asistencia y Gestión</h3>
+            <button id="btn-exportar-csv" class="btn-large" style="margin-bottom: 20px; background-color: #27ae60;">📥 Exportar a Excel (CSV)</button>
+            <div style="width: 100%; max-width: 400px; margin: 0 auto 30px auto;">
+                <canvas id="grafica-asistencia"></canvas>
+            </div>
+            <div id="tabla-excel-container" style="overflow-x: auto; max-height: 500px; border: 1px solid #ddd; border-radius: 6px;"></div>
+        </div>
+
+        <hr>
+        <button id="btn-volver-kiosco" class="btn-secondary" style="width: 100%;">Volver al Kiosco de Entrada</button>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
