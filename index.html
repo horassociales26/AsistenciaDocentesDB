@@ -38,77 +38,77 @@
             </div>
         </div>
 
-        <div id="tarjeta-exito" class="hidden" style="background: #2ecc71; color: white; padding: 25px; border-radius: 12px; box-shadow: 0 8px 15px rgba(46,204,113,0.3); margin-top: 15px;">
+        <div id="tarjeta-exito" class="hidden" style="background: #10b981; color: white; padding: 25px; border-radius: 12px; box-shadow: 0 8px 15px rgba(16,185,129,0.2); margin-top: 15px;">
             <h3 id="exito-nombre" style="font-size: 22px; margin-bottom: 5px;"></h3>
             <p id="exito-hora" style="font-size: 16px; font-weight: bold;"></p>
         </div>
         
         <div id="status-msg" class="msg-status"></div>
 
-        <hr style="border: 0; height: 1px; background: #eee; margin: 25px 0;">
+        <hr style="border: 0; height: 1px; background: #e2e8f0; margin: 25px 0;">
         <div style="display: flex; justify-content: space-between;">
-            <button id="btn-ir-admin" class="btn-tab" style="font-weight: 600;">Panel Maestro</button>
-            <button id="btn-logout" class="btn-danger" style="background: transparent; color: #e74c3c; border: 1px solid #e74c3c;">Cerrar Sesión</button>
+            <button id="btn-ir-admin" class="btn-tab">⚙️ Panel Maestro</button>
+            <button id="btn-logout" class="btn-danger" style="background: transparent; color: #ef4444; border: 1px solid #ef4444;">Cerrar Sesión</button>
         </div>
     </div>
 
     <div id="admin-container" class="container wide hidden">
         <h2 style="text-align: left; margin-bottom: 20px;">Panel Maestro de Gestión</h2>
         
-        <div class="admin-menu">
+        <div class="admin-menu" style="justify-content: flex-start; border-bottom: 1px solid var(--slate-200); padding-bottom: 10px;">
             <button id="tab-reporte" class="btn-tab active-tab">Matriz General</button>
-            <button id="tab-nuevo" class="btn-tab">Agregar Docente</button>
+            <button id="tab-nuevo" class="btn-tab">➕ Agregar Docente</button>
         </div>
 
         <div id="sec-reporte" class="admin-section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 15px;">
-                <input type="text" id="buscador-docente" placeholder="Buscar por nombre o PIN..." style="width: 100%; max-width: 400px; margin-bottom: 0;">
-                <button id="btn-exportar-csv" class="btn-success">Exportar a Excel</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin: 15px 0; flex-wrap: wrap; gap: 15px;">
+                <input type="text" id="buscador-docente" placeholder="🔍 Buscar por nombre completo o PIN asignado..." style="width: 100%; max-width: 380px; margin-bottom: 0; background-color: #fff; border: 1px solid var(--slate-300);">
+                <button id="btn-exportar-csv" class="btn-primary" style="background-color: #24292f;"><svg style="vertical-align:middle; margin-right:5px;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4M7 10l5 5 5-5M12 15V3"/></svg> Exportar a Excel (.xlsx)</button>
             </div>
             
             <div id="tabla-excel-container" class="table-wrapper"></div>
             
-            <div style="width: 100%; max-width: 350px; margin: 20px auto 0 auto;">
+            <div style="width: 100%; max-width: 320px; margin: 25px auto 0 auto;">
                 <canvas id="grafica-asistencia"></canvas>
             </div>
         </div>
 
-        <div id="sec-nuevo" class="admin-section hidden" style="max-width: 500px; margin: 0 auto;">
+        <div id="sec-nuevo" class="admin-section hidden" style="max-width: 460px; margin: 30px auto;">
             <h3 class="subtitle">Registrar Nuevo Docente en el Sistema</h3>
-            <input type="text" id="nuevo-nombres" placeholder="Nombres" required autocomplete="off">
-            <input type="text" id="nuevo-apellidos" placeholder="Apellidos" required autocomplete="off">
+            <input type="text" id="nuevo-nombres" placeholder="Nombres del Profesor" required autocomplete="off">
+            <input type="text" id="nuevo-apellidos" placeholder="Apellidos del Profesor" required autocomplete="off">
             <button id="btn-guardar-docente" class="btn-primary" style="width: 100%; padding: 12px;">Guardar y Generar PIN</button>
             <div id="admin-msg" class="msg-status"></div>
         </div>
 
-        <hr style="border: 0; height: 1px; background: #eee; margin: 20px 0;">
-        <button id="btn-volver-kiosco" class="btn-tab" style="width: 100%;">Volver al Kiosco de Entrada</button>
+        <hr style="border: 0; height: 1px; background: #e2e8f0; margin: 20px 0;">
+        <button id="btn-volver-kiosco" class="btn-tab" style="width: 100%; border: 1px solid var(--slate-200);">Volver al Kiosco de Entrada</button>
     </div>
 
     <div id="modal-edicion" class="modal-overlay hidden">
         <div class="modal-card">
-            <h3 style="color: var(--dark); margin-bottom: 15px; font-size: 22px;">Gestión de Docente</h3>
+            <h3 style="color: var(--slate-900); margin-bottom: 15px; font-size: 18px; font-weight: 700;">Gestión de Docente</h3>
             <input type="hidden" id="edit-id">
             
             <div style="text-align: left; margin-bottom: 20px;">
                 <label class="modal-label">Apellidos:</label>
-                <input type="text" id="edit-apellidos" class="modal-input" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid var(--border); border-radius: 6px;">
+                <input type="text" id="edit-apellidos" class="modal-input">
                 
                 <label class="modal-label">Nombres:</label>
-                <input type="text" id="edit-nombres" class="modal-input" style="width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid var(--border); border-radius: 6px;">
+                <input type="text" id="edit-nombres" class="modal-input">
 
                 <label class="modal-label">Estado en el Sistema:</label>
-                <select id="edit-estado" class="modal-input" style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border); font-weight: 600;">
+                <select id="edit-estado" class="modal-input" style="font-weight: 600;">
                     <option value="true">Activo (Permite marcar asistencia)</option>
                     <option value="false">Inactivo (Bloquea acceso al kiosco)</option>
                 </select>
             </div>
 
-            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <div style="display: flex; gap: 10px; margin-bottom: 12px;">
                 <button id="btn-guardar-edicion" class="btn-primary" style="flex: 2;">Guardar Cambios</button>
-                <button id="btn-eliminar-docente" class="btn-danger" style="flex: 1;">Eliminar</button>
+                <button id="btn-eliminar-docente" class="btn-danger" style="background-color: #ef4444; flex: 1;">Eliminar</button>
             </div>
-            <button id="btn-cerrar-modal" class="btn-tab" style="width: 100%; border: 1px solid var(--border);">Cancelar</button>
+            <button id="btn-cerrar-modal" class="btn-tab" style="width: 100%; border: 1px solid var(--slate-200); color: var(--slate-600);">Cancelar</button>
         </div>
     </div>
 
