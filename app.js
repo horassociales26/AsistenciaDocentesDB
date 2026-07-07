@@ -6,16 +6,13 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const clienteSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // =========================================================
-// 2. REFERENCIAS DEL DOM 
+// 2. REFERENCIAS Y CONTROL DE SESIÓN
 // =========================================================
 const loginContainer = document.getElementById('login-container');
 const kioscoContainer = document.getElementById('kiosco-container');
 const adminContainer = document.getElementById('admin-container');
 const statusMsg = document.getElementById('status-msg');
 
-// =========================================================
-// 3. SISTEMA DE SESIÓN (LOGIN / LOGOUT)
-// =========================================================
 async function checkSession() {
     const { data: { session } } = await clienteSupabase.auth.getSession();
     if (session) mostrarKiosco(); else mostrarLogin();
@@ -26,127 +23,115 @@ document.getElementById('btn-login').addEventListener('click', async () => {
     const password = document.getElementById('password').value;
     const loginMsg = document.getElementById('login-msg');
     loginMsg.textContent = "Verificando credenciales...";
-    const { data, error } = await clienteSupabase.auth.signInWithPassword({ email, password });
-    if (error) loginMsg.textContent = "Error: " + error.message; else { loginMsg.textContent = ""; mostrarKiosco(); }
+    const { error } = await clienteSupabase.auth.signInWithPassword({ email, password });
+    if (error) loginMsg.textContent = "Error: " + error.message; 
+    else { loginMsg.textContent = ""; mostrarKiosco(); }
 });
 
 document.getElementById('btn-logout').addEventListener('click', async () => {
-    await clienteSupabase.auth.signOut();
-    mostrarLogin();
+    await clienteSupabase.auth.signOut(); mostrarLogin();
 });
 
 // =========================================================
-// 4. LÓGICA DEL KIOSCO (CON CONFIRMACIÓN "SÍ/NO")
+// 3. LÓGICA DEL KIOSCO (ASISTENCIA AUTOMÁTICA)
 // =========================================================
 const pinInput = document.getElementById('pin-input');
 const bloqueIngreso = document.getElementById('bloque-ingreso');
 const bloqueConfirmacion = document.getElementById('bloque-confirmacion');
-const nombreConfirmacion = document.getElementById('nombre-confirmacion');
 let docentePendiente = null;
 
 document.getElementById('btn-marcar').addEventListener('click', verificarPIN);
 pinInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') verificarPIN(); });
 
 async function verificarPIN() {
-    const pinDigitado = pinInput.value.trim();
+    const pin = pinInput.value.trim();
+    if (pin.length !== 3) { mostrarAlerta(statusMsg, "El PIN debe tener 3 dígitos.", "#e74c3c", "white"); pinInput.focus(); return; }
+    if (new Date().getDay() !== 6) { mostrarAlerta(statusMsg, "El sistema solo registra asistencias los días sábado.", "#e74c3c", "white"); pinInput.value = ""; return; }
 
-    if (pinDigitado.length !== 3) {
-        mostrarAlerta(statusMsg, "El PIN debe tener 3 dígitos.", "red", "white");
-        pinInput.focus(); return;
-    }
+    const { data: docente, error } = await clienteSupabase
+        .from('docentes').select('id, nombres, apellidos, estado_activo').eq('pin', parseInt(pin)).single();
 
-    if (new Date().getDay() !== 6) {
-        mostrarAlerta(statusMsg, "❌ Solo se puede marcar los días sábado.", "red", "white");
-        pinInput.value = ""; pinInput.focus(); return;
-    }
-
-    const { data: docente, error: errorBusqueda } = await clienteSupabase
-        .from('docentes').select('id, nombres, apellidos').eq('pin', parseInt(pinDigitado)).single();
-
-    if (errorBusqueda || !docente) {
-        mostrarAlerta(statusMsg, "❌ PIN Incorrecto.", "red", "white");
-        pinInput.value = ""; pinInput.focus(); return;
-    }
+    if (error || !docente) { mostrarAlerta(statusMsg, "PIN no encontrado.", "#e74c3c", "white"); pinInput.value = ""; pinInput.focus(); return; }
+    if (!docente.estado_activo) { mostrarAlerta(statusMsg, "Su usuario está inactivo. Consulte a coordinación.", "#f39c12", "white"); pinInput.value = ""; return; }
 
     docentePendiente = docente;
-    nombreConfirmacion.textContent = `¿${docente.nombres} ${docente.apellidos}?`;
-    bloqueIngreso.classList.add('hidden');
-    bloqueConfirmacion.classList.remove('hidden');
+    document.getElementById('nombre-confirmacion').textContent = `${docente.nombres} ${docente.apellidos}`;
+    bloqueIngreso.classList.add('hidden'); bloqueConfirmacion.classList.remove('hidden');
 }
 
 document.getElementById('btn-si').addEventListener('click', async () => {
     if (!docentePendiente) return;
+    const ahora = new Date();
+    const fechaLocal = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
+    const horaAmigable = ahora.toLocaleTimeString('es-SV', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    const { error: errorAsistencia } = await clienteSupabase
-        .from('asistencias').insert([{ docente_id: docentePendiente.id, estado: 'asistio' }]);
+    const { error } = await clienteSupabase.from('asistencias')
+        .insert([{ docente_id: docentePendiente.id, estado: 'asistio', fecha: fechaLocal, hora: ahora.toTimeString().split(' ')[0] }]);
 
-    if (errorAsistencia) {
-        if (errorAsistencia.code === '23505') { 
-            mostrarAlerta(statusMsg, `⚠️ Ya hay un registro de hoy para ${docentePendiente.nombres}.`, "#f39c12", "white");
-        } else {
-            mostrarAlerta(statusMsg, "❌ Error al guardar.", "red", "white");
-        }
+    if (error) {
+        if (error.code === '23505') mostrarAlerta(statusMsg, `Ya hay un registro guardado para hoy.`, "#f39c12", "white");
+        else mostrarAlerta(statusMsg, "Error del servidor.", "#e74c3c", "white");
+        resetearKioscoUI();
     } else {
-        mostrarAlerta(statusMsg, `✅ ¡Asistencia confirmada, ${docentePendiente.nombres}!`, "#27ae60", "white");
+        bloqueConfirmacion.classList.add('hidden');
+        document.getElementById('exito-nombre').textContent = `${docentePendiente.nombres}`;
+        document.getElementById('exito-hora').textContent = `Hora de entrada: ${horaAmigable}`;
+        document.getElementById('tarjeta-exito').classList.remove('hidden');
+        setTimeout(() => { document.getElementById('tarjeta-exito').classList.add('hidden'); resetearKioscoUI(); }, 3500);
     }
-    resetearKioscoUI();
 });
 
-document.getElementById('btn-no').addEventListener('click', () => {
-    mostrarAlerta(statusMsg, "Operación cancelada. Intente de nuevo.", "#f39c12", "white");
-    resetearKioscoUI();
-});
+document.getElementById('btn-no').addEventListener('click', () => { mostrarAlerta(statusMsg, "Operación cancelada.", "#f39c12", "white"); resetearKioscoUI(); });
 
-function resetearKioscoUI() {
-    docentePendiente = null; pinInput.value = "";
-    bloqueConfirmacion.classList.add('hidden'); bloqueIngreso.classList.remove('hidden');
-    pinInput.focus();
-}
+function resetearKioscoUI() { docentePendiente = null; pinInput.value = ""; bloqueConfirmacion.classList.add('hidden'); bloqueIngreso.classList.remove('hidden'); pinInput.focus(); }
 
 // =========================================================
-// 5. PANEL DE ADMINISTRADOR
+// 4. PANEL DE ADMINISTRADOR (NAVEGACIÓN)
 // =========================================================
-const secNuevo = document.getElementById('sec-nuevo');
-const secPermiso = document.getElementById('sec-permiso');
-const secReporte = document.getElementById('sec-reporte');
+const secNuevo = document.getElementById('sec-nuevo'); const secReporte = document.getElementById('sec-reporte');
+const tabNuevo = document.getElementById('tab-nuevo'); const tabReporte = document.getElementById('tab-reporte');
 
-const tabNuevo = document.getElementById('tab-nuevo');
-const tabPermiso = document.getElementById('tab-permiso');
-const tabReporte = document.getElementById('tab-reporte');
-
-document.getElementById('btn-ir-admin').addEventListener('click', () => {
-    kioscoContainer.classList.add('hidden');
-    adminContainer.classList.remove('hidden');
-    cambiarPestana(secNuevo, tabNuevo);
+document.getElementById('btn-ir-admin').addEventListener('click', () => { 
+    kioscoContainer.classList.add('hidden'); 
+    adminContainer.classList.remove('hidden'); 
+    secNuevo.classList.add('hidden'); 
+    secReporte.classList.remove('hidden'); 
+    tabNuevo.classList.remove('active-tab'); 
+    tabReporte.classList.add('active-tab');
+    document.getElementById('admin-msg').innerHTML = ""; 
+    generarReporte(); 
 });
 
 document.getElementById('btn-volver-kiosco').addEventListener('click', mostrarKiosco);
 
-tabNuevo.addEventListener('click', () => cambiarPestana(secNuevo, tabNuevo));
-tabPermiso.addEventListener('click', () => cambiarPestana(secPermiso, tabPermiso));
-tabReporte.addEventListener('click', () => {
-    cambiarPestana(secReporte, tabReporte);
-    generarReporte();
+tabReporte.addEventListener('click', () => { 
+    secNuevo.classList.add('hidden'); 
+    secReporte.classList.remove('hidden'); 
+    tabNuevo.classList.remove('active-tab'); 
+    tabReporte.classList.add('active-tab'); 
+    generarReporte(); 
 });
 
-function cambiarPestana(seccionActiva, tabActiva) {
-    secNuevo.classList.add('hidden'); secPermiso.classList.add('hidden'); secReporte.classList.add('hidden');
-    tabNuevo.className = 'btn-tab'; tabPermiso.className = 'btn-tab'; tabReporte.className = 'btn-tab';
-    seccionActiva.classList.remove('hidden'); tabActiva.className = 'btn-tab active-tab';
-}
+tabNuevo.addEventListener('click', () => { 
+    secReporte.classList.add('hidden'); 
+    secNuevo.classList.remove('hidden'); 
+    tabReporte.classList.remove('active-tab'); 
+    tabNuevo.classList.add('active-tab'); 
+    document.getElementById('nuevo-nombres').value = "";
+    document.getElementById('nuevo-apellidos').value = "";
+    document.getElementById('admin-msg').innerHTML = "";
+});
 
 // =========================================================
-// 6. GESTIÓN (CRUD)
+// 5. GESTIÓN DE DOCENTES (NUEVO REGISTRO Y MODAL)
 // =========================================================
 document.getElementById('btn-guardar-docente').addEventListener('click', async () => {
-    const inputNombres = document.getElementById('nuevo-nombres');
-    const inputApellidos = document.getElementById('nuevo-apellidos');
-    const adminMsg = document.getElementById('admin-msg');
+    const inputN = document.getElementById('nuevo-nombres'); const inputA = document.getElementById('nuevo-apellidos');
+    const msg = document.getElementById('admin-msg');
     
-    const nombres = inputNombres.value.trim(); const apellidos = inputApellidos.value.trim();
-    if (!nombres || !apellidos) { adminMsg.innerHTML = "<span style='color:red;'>Completa ambos campos.</span>"; return; }
+    if (!inputN.value.trim() || !inputA.value.trim()) { msg.innerHTML = "<span style='color:red;'>Complete ambos campos.</span>"; return; }
+    msg.innerHTML = "<span style='color:blue;'>Generando código...</span>";
     
-    adminMsg.innerHTML = "<span style='color:blue;'>Generando PIN único...</span>";
     let pinUnico = false; let nuevoPin = 0;
     while (!pinUnico) {
         nuevoPin = Math.floor(Math.random() * 900) + 100;
@@ -154,161 +139,212 @@ document.getElementById('btn-guardar-docente').addEventListener('click', async (
         if (data && data.length === 0) pinUnico = true;
     }
 
-    const { error: errInsert } = await clienteSupabase.from('docentes').insert([{ nombres, apellidos, pin: nuevoPin }]);
-    if (errInsert) {
-        adminMsg.innerHTML = "<span style='color:red;'>Error al guardar.</span>";
-    } else {
-        adminMsg.innerHTML = `✅ ¡Guardado!<br>PIN para <b>${nombres}</b>:<br><span style="font-size: 32px; color: #27ae60; display: block; margin-top: 10px;">${nuevoPin}</span>`;
-        inputNombres.value = ""; inputApellidos.value = "";
-    }
+    const { error } = await clienteSupabase.from('docentes').insert([{ nombres: inputN.value.trim(), apellidos: inputA.value.trim(), pin: nuevoPin, estado_activo: true }]);
+    if (error) msg.innerHTML = "<span style='color:red;'>Error al guardar.</span>";
+    else { msg.innerHTML = `Registro exitoso. PIN Asignado: <span style="font-size:24px; color:#2ecc71; display:block; margin-top:5px;">${nuevoPin}</span>`; inputN.value = ""; inputA.value = ""; }
 });
 
-window.editarDocente = async function(id, nombresAct, apellidosAct) {
-    const nuevosNombres = prompt("Editar Nombres:", nombresAct);
-    if (nuevosNombres === null || nuevosNombres.trim() === "") return;
-    
-    const nuevosApellidos = prompt("Editar Apellidos:", apellidosAct);
-    if (nuevosApellidos === null || nuevosApellidos.trim() === "") return;
+// --- Lógica de la Tarjeta Modal ---
+const modalEdicion = document.getElementById('modal-edicion');
+const editId = document.getElementById('edit-id');
+const editNombres = document.getElementById('edit-nombres');
+const editApellidos = document.getElementById('edit-apellidos');
+const editEstado = document.getElementById('edit-estado');
 
-    const { error } = await clienteSupabase.from('docentes')
-        .update({ nombres: nuevosNombres.trim(), apellidos: nuevosApellidos.trim() }).eq('id', id);
-    if (error) alert("Error al actualizar."); else generarReporte();
+window.abrirModalEdicion = function(id, nombres, apellidos, estadoActivo) {
+    editId.value = id;
+    editNombres.value = nombres;
+    editApellidos.value = apellidos;
+    editEstado.value = estadoActivo ? "true" : "false";
+    modalEdicion.classList.remove('hidden');
 };
 
-window.borrarDocente = async function(id, nombre) {
-    const confirmacion = confirm(`⚠️ ¿Eliminar a ${nombre} y todo su historial de asistencias?`);
-    if (!confirmacion) return;
+document.getElementById('btn-cerrar-modal').addEventListener('click', () => modalEdicion.classList.add('hidden'));
 
+document.getElementById('btn-guardar-edicion').addEventListener('click', async () => {
+    const id = editId.value;
+    const n = editNombres.value.trim();
+    const a = editApellidos.value.trim();
+    const estado = editEstado.value === "true";
+    
+    if(!n || !a) { alert("Los campos de nombre y apellido son obligatorios."); return; }
+    
+    const btnGuardar = document.getElementById('btn-guardar-edicion');
+    btnGuardar.textContent = "Guardando...";
+    
+    const { error } = await clienteSupabase.from('docentes').update({ nombres: n, apellidos: a, estado_activo: estado }).eq('id', id);
+    
+    btnGuardar.textContent = "Guardar Cambios";
+    if(error) alert("Error de conexión al actualizar.");
+    else { modalEdicion.classList.add('hidden'); generarReporte(); }
+});
+
+document.getElementById('btn-eliminar-docente').addEventListener('click', async () => {
+    const id = editId.value;
+    const n = editNombres.value;
+    const a = editApellidos.value;
+    
+    if(!confirm(`ATENCIÓN: ¿Está seguro de que desea eliminar permanentemente a ${n} ${a}?\n\nEsta acción borrará todo su historial de asistencia y no se puede deshacer.`)) return;
+
+    const btnEliminar = document.getElementById('btn-eliminar-docente');
+    btnEliminar.textContent = "Borrando...";
+    
     await clienteSupabase.from('asistencias').delete().eq('docente_id', id);
     const { error } = await clienteSupabase.from('docentes').delete().eq('id', id);
-    if (error) alert("Error al eliminar."); else generarReporte();
-};
-
-// =========================================================
-// 7. REGISTRO DE PERMISOS
-// =========================================================
-document.getElementById('btn-marcar-permiso').addEventListener('click', async () => {
-    const pin = document.getElementById('pin-permiso').value.trim();
-    const fecha = document.getElementById('fecha-permiso').value;
-    const msg = document.getElementById('permiso-msg');
     
-    if (pin.length !== 3) { mostrarAlerta(msg, "PIN debe tener 3 dígitos.", "transparent", "red"); return; }
-    if (!fecha) { mostrarAlerta(msg, "Selecciona una fecha.", "transparent", "red"); return; }
-
-    const [year, month, day] = fecha.split('-');
-    if (new Date(year, month - 1, day).getDay() !== 6) { mostrarAlerta(msg, "❌ La fecha DEBE ser un sábado.", "transparent", "red"); return; }
-
-    const { data: doc, error: errBusq } = await clienteSupabase.from('docentes').select('*').eq('pin', parseInt(pin)).single();
-    if (errBusq || !doc) { mostrarAlerta(msg, "❌ PIN no existe.", "transparent", "red"); return; }
-
-    const { error: errPerm } = await clienteSupabase.from('asistencias').insert([{ docente_id: doc.id, estado: 'permiso', fecha: fecha }]);
-    if (errPerm) {
-        if (errPerm.code === '23505') mostrarAlerta(msg, `⚠️ ${doc.nombres} ya tiene registro ese día.`, "#f39c12", "white");
-        else mostrarAlerta(msg, "❌ Error de servidor.", "red", "white");
-    } else {
-        mostrarAlerta(msg, `✅ Permiso de ${doc.nombres} guardado para el ${day}/${month}.`, "#f39c12", "white");
-        document.getElementById('pin-permiso').value = ""; document.getElementById('fecha-permiso').value = "";
-    }
+    btnEliminar.textContent = "Eliminar";
+    if(error) alert("Error al intentar eliminar.");
+    else { modalEdicion.classList.add('hidden'); generarReporte(); }
 });
 
 // =========================================================
-// 8. REPORTES, MATRIZ EXCEL Y GRÁFICAS
+// 6. MATRIZ GENERAL Y GENERACIÓN DE TABLA
 // =========================================================
 let miGrafico = null; 
+function obtenerSabados() {
+    const sabados = []; let fecha = new Date(2026, 6, 11); const fin = new Date(2026, 10, 30);
+    while (fecha <= fin) {
+        if (fecha.getDay() === 6) {
+            const y = fecha.getFullYear(); const m = String(fecha.getMonth() + 1).padStart(2, '0'); const d = String(fecha.getDate()).padStart(2, '0');
+            sabados.push(`${y}-${m}-${d}`);
+        }
+        fecha.setDate(fecha.getDate() + 7);
+    }
+    return sabados;
+}
 
 async function generarReporte() {
-    const tablaContainer = document.getElementById('tabla-excel-container');
-    tablaContainer.innerHTML = "<p style='padding: 20px; font-weight: bold; color: #3498db;'>🔄 Cargando...</p>";
+    const cont = document.getElementById('tabla-excel-container');
+    cont.innerHTML = "<p style='padding: 20px; font-weight: bold; color: #3498db;'>Sincronizando datos...</p>";
 
     const { data: docentes } = await clienteSupabase.from('docentes').select('*').order('apellidos', { ascending: true });
-    const { data: asistencias } = await clienteSupabase.from('asistencias').select('*').order('fecha', { ascending: true });
+    const { data: asistencias } = await clienteSupabase.from('asistencias').select('*');
+    if (!docentes) { cont.innerHTML = "<p style='color:red;'>Error al cargar los datos del servidor.</p>"; return; }
 
-    if (!docentes || !asistencias) { tablaContainer.innerHTML = "<p style='color: red;'>Error al cargar.</p>"; return; }
+    const fechas = obtenerSabados();
+    const hoyStr = new Date().toISOString().split('T')[0];
+    let gA = 0, gP = 0, gF = 0;
 
-    const fechasUnicas = [...new Set(asistencias.map(a => a.fecha))];
-    let globalAsis = 0; let globalPerm = 0; let globalFaltas = 0;
+    let html = `<table class="matrix-table" id="tabla-exportar"><thead><tr>
+        <th class="col-fija fix-1">N°</th>
+        <th class="col-fija fix-2">Docente</th>
+        <th class="col-fija fix-3">PIN</th>
+        <th class="col-fija fix-4">Asist.</th>
+        <th class="col-fija fix-5">Perm.</th>
+        <th class="col-fija fix-6">Faltas</th>
+        <th class="col-fija fix-7">Acciones</th>`;
+    
+    fechas.forEach(f => {
+        const d = f.split('-');
+        html += `<th class="${f === hoyStr ? 'col-actual' : ''}">${d[2]}/${d[1]}</th>`;
+    });
+    html += `</tr></thead><tbody>`;
 
-    let htmlTabla = `<table class="report-table" id="tabla-exportar">
-                        <thead><tr>
-                            <th>N°</th>
-                            <th style="text-align: left;">Apellidos</th>
-                            <th style="text-align: left;">Nombres</th>
-                            <th>PIN</th>
-                            <th>⚙️</th>`;
-    fechasUnicas.forEach(f => { const p = f.split('-'); htmlTabla += `<th>${p[2]}/${p[1]}</th>`; });
-    htmlTabla += `<th class="col-total">✅ Asist.</th><th class="col-total">⚠️ Perm.</th><th class="col-total">❌ Faltas</th></tr></thead><tbody>`;
+    docentes.forEach((doc, i) => {
+        let a = 0, p = 0, f = 0;
+        const inact = doc.estado_activo === false ? "fila-inactiva" : "";
+        const badgeInactivo = doc.estado_activo === false ? `<span class="badge-inactivo">INACTIVO</span>` : "";
+        const nombreCompleto = `${doc.apellidos}, ${doc.nombres}`;
 
-    docentes.forEach((docente, index) => {
-        let asis = 0; let perm = 0; let falta = 0;
-        
-        htmlTabla += `<tr>
-                        <td>${index + 1}</td>
-                        <td style="text-align: left;">${docente.apellidos}</td>
-                        <td style="text-align: left;">${docente.nombres}</td>
-                        <td>${docente.pin}</td>
-                        <td>
-                            <button onclick="editarDocente(${docente.id}, '${docente.nombres}', '${docente.apellidos}')" class="btn-primary btn-action" title="Editar">✏️</button>
-                            <button onclick="borrarDocente(${docente.id}, '${docente.nombres}')" class="btn-danger btn-action" title="Eliminar">🗑️</button>
-                        </td>`;
+        let celdasFechas = "";
+        fechas.forEach(fecha => {
+            const reg = asistencias.find(x => x.docente_id === doc.id && x.fecha === fecha);
+            let val = 'falta', cls = 'f';
+            
+            if (reg) {
+                if (reg.estado === 'asistio') { a++; gA++; val = 'asistio'; cls = 'a'; }
+                else if (reg.estado === 'permiso') { p++; gP++; val = 'permiso'; cls = 'p'; }
+            } else { f++; gF++; }
 
-        fechasUnicas.forEach(fecha => {
-            const registro = asistencias.find(a => a.docente_id === docente.id && a.fecha === fecha);
-            if (registro) {
-                if (registro.estado === 'asistio') { htmlTabla += `<td class="status-asistio">V</td>`; asis++; globalAsis++; } 
-                else if (registro.estado === 'permiso') { htmlTabla += `<td class="status-permiso">P</td>`; perm++; globalPerm++; }
-            } else { htmlTabla += `<td class="status-falta">F</td>`; falta++; globalFaltas++; }
+            celdasFechas += `<td class="${fecha === hoyStr ? 'celda-actual' : ''}">
+                <select class="select-asistencia ${cls}" onchange="cambiarEstadoCelda(${doc.id}, '${fecha}', this.value)" ${!doc.estado_activo ? 'disabled' : ''}>
+                    <option value="asistio" ${val === 'asistio' ? 'selected' : ''}>A</option>
+                    <option value="permiso" ${val === 'permiso' ? 'selected' : ''}>P</option>
+                    <option value="falta" ${val === 'falta' ? 'selected' : ''}>F</option>
+                </select>
+            </td>`;
         });
-        htmlTabla += `<td class="col-total">${asis}</td><td class="col-total">${perm}</td><td class="col-total" style="color: #c0392b;">${falta}</td></tr>`;
+
+        const btnEditar = `<button onclick="abrirModalEdicion(${doc.id}, '${doc.nombres}', '${doc.apellidos}', ${doc.estado_activo})" class="btn-manage">Ajustes</button>`;
+
+        html += `<tr class="${inact}">
+            <td class="col-fija fix-1">${i + 1}</td>
+            <td class="col-fija fix-2" title="${nombreCompleto}">
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${nombreCompleto}</span>
+                    ${badgeInactivo}
+                </div>
+            </td>
+            <td class="col-fija fix-3">${doc.pin}</td>
+            <td class="col-fija fix-4">${a}</td>
+            <td class="col-fija fix-5">${p}</td>
+            <td class="col-fija fix-6">${f}</td>
+            <td class="col-fija fix-7" style="display:flex; justify-content:center; align-items:center; border:none; padding-top: 12px;">${btnEditar}</td>
+            ${celdasFechas}
+        </tr>`;
     });
 
-    htmlTabla += `</tbody></table>`;
-    tablaContainer.innerHTML = htmlTabla;
-    renderizarGrafica(globalAsis, globalPerm, globalFaltas);
+    html += `</tbody></table>`; cont.innerHTML = html;
+    dibujarGrafica(gA, gP, gF);
+
+    setTimeout(() => { const col = document.querySelector('.col-actual'); if (col) col.scrollIntoView({ behavior: 'smooth', inline: 'center' }); }, 300);
 }
 
-function renderizarGrafica(asis, perm, faltas) {
+window.cambiarEstadoCelda = async function(id, fecha, estado) {
+    await clienteSupabase.from('asistencias').delete().eq('docente_id', id).eq('fecha', fecha);
+    if (estado !== 'falta') await clienteSupabase.from('asistencias').insert([{ docente_id: id, fecha: fecha, estado: estado, hora: "13:00:00" }]);
+    generarReporte();
+};
+
+document.getElementById('buscador-docente').addEventListener('input', (e) => {
+    const term = e.target.value.toLowerCase().trim();
+    document.querySelectorAll('#tabla-exportar tbody tr').forEach(fila => {
+        fila.classList.toggle('hidden', !fila.innerText.toLowerCase().includes(term));
+    });
+});
+
+function dibujarGrafica(a, p, f) {
     const ctx = document.getElementById('grafica-asistencia').getContext('2d');
     if (miGrafico) miGrafico.destroy();
-    miGrafico = new Chart(ctx, {
-        type: 'doughnut',
-        data: { labels: ['Asistencias', 'Permisos', 'Faltas'], datasets: [{ data: [asis, perm, faltas], backgroundColor: ['#2ecc71', '#f39c12', '#e74c3c'], hoverOffset: 4 }] },
-        options: { responsive: true, plugins: { legend: { position: 'bottom' }, title: { display: true, text: 'Resumen Global' } } }
-    });
+    miGrafico = new Chart(ctx, { type: 'doughnut', data: { labels: ['Asistencias', 'Permisos', 'Faltas'], datasets: [{ data: [a, p, f], backgroundColor: ['#2ecc71', '#f39c12', '#e74c3c'] }] }, options: { plugins: { legend: { position: 'bottom' } } } });
 }
 
-// EXPORTAR A EXCEL (Ignorando la columna de acciones)
+// =========================================================
+// 8. EXPORTACIÓN NATIVA A EXCEL (.xlsx)
+// =========================================================
 document.getElementById('btn-exportar-csv').addEventListener('click', () => {
-    const tabla = document.getElementById('tabla-exportar');
-    if (!tabla) return alert("Genera el reporte primero.");
-    let csv = "data:text/csv;charset=utf-8,";
+    const tabla = document.getElementById('tabla-exportar'); 
+    if (!tabla) return alert("Por favor, espere a que la tabla cargue primero.");
     
+    let dataMatriz = [];
+
     tabla.querySelectorAll("tr").forEach(fila => {
         let arrayFila = [];
-        fila.querySelectorAll("td, th").forEach((col, i) => {
-            if (i === 4) return; // Índice 4 es la columna ⚙️ (Acciones). La omitimos.
-            arrayFila.push(`"${col.innerText.replace(/(\r\n|\n|\r)/gm, "").trim()}"`);
+        fila.querySelectorAll("td, th").forEach((c, i) => {
+            if (i === 6) return; // Omitir la columna de "Acciones"
+            
+            const sel = c.querySelector('select');
+            let valorCelda = sel ? (sel.value === 'asistio' ? 'A' : sel.value === 'permiso' ? 'P' : 'F') : c.innerText.replace(/\n/g, '').trim();
+            if (i === 1) valorCelda = valorCelda.replace("INACTIVO", "").trim();
+            
+            arrayFila.push(valorCelda);
         });
-        csv += arrayFila.join(",") + "\r\n";
+        dataMatriz.push(arrayFila);
     });
-    
-    const link = document.createElement("a");
-    link.setAttribute("href", encodeURI(csv)); link.setAttribute("download", "Reporte_Asistencia.csv");
-    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+
+    const ws = XLSX.utils.aoa_to_sheet(dataMatriz);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Reporte_Asistencias");
+
+    // SheetJS maneja la exportación de forma nativa y estable
+    XLSX.writeFile(wb, "Matriz_Asistencias.xlsx");
 });
 
 // =========================================================
 // 9. UTILIDADES
 // =========================================================
-function mostrarKiosco() {
-    loginContainer.classList.add('hidden'); adminContainer.classList.add('hidden');
-    kioscoContainer.classList.remove('hidden'); resetearKioscoUI();
-}
-function mostrarLogin() {
-    loginContainer.classList.remove('hidden'); kioscoContainer.classList.add('hidden'); adminContainer.classList.add('hidden');
-}
-function mostrarAlerta(el, msg, bg, text) {
-    el.textContent = msg; el.style.backgroundColor = bg; el.style.color = text;
-    setTimeout(() => { el.textContent = ""; el.style.backgroundColor = "transparent"; }, 3500);
-}
+function mostrarKiosco() { loginContainer.classList.add('hidden'); adminContainer.classList.add('hidden'); kioscoContainer.classList.remove('hidden'); resetearKioscoUI(); }
+function mostrarLogin() { loginContainer.classList.remove('hidden'); kioscoContainer.classList.add('hidden'); adminContainer.classList.add('hidden'); }
+function mostrarAlerta(el, msg, bg, txt) { el.textContent = msg; el.style.backgroundColor = bg; el.style.color = txt; setTimeout(() => el.textContent="", 3500); }
 
 checkSession();
