@@ -1,9 +1,17 @@
 // =========================================================
-// 1. CONFIGURACIÓN DE SUPABASE
+// 1. CONFIGURACIÓN DE SUPABASE (CON PERSISTENCIA FORZADA)
 // =========================================================
 const SUPABASE_URL = 'https://iamemtvpoguqveskpaaa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhbWVtdHZwb2d1cXZlc2twYWFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNzY3MjIsImV4cCI6MjA5ODc1MjcyMn0.vdQTiZkCTsI61V1FbuLXMzJfbnz3n6LwGQ_E_GPmsXo';
-const clienteSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// Forzamos explícitamente el uso de localStorage para evitar bloqueos en GitHub Pages
+const clienteSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        storage: window.localStorage 
+    }
+});
 
 // =========================================================
 // 2. REFERENCIAS GLOBALES
@@ -18,7 +26,7 @@ const bloqueConfirmacion = document.getElementById('bloque-confirmacion');
 let docentePendiente = null;
 
 // =========================================================
-// 3. UTILIDADES (Movidas arriba para evitar errores de carga)
+// 3. UTILIDADES (Cargadas al inicio para evitar errores)
 // =========================================================
 function resetearKioscoUI() { 
     docentePendiente = null; 
@@ -49,25 +57,32 @@ function mostrarAlerta(el, msg, bg, txt) {
 }
 
 // =========================================================
-// 4. CONTROL DE SESIÓN
+// 4. CONTROL DE SESIÓN EN TIEMPO REAL (NUEVO)
 // =========================================================
-async function checkSession() {
-    const { data: { session } } = await clienteSupabase.auth.getSession();
-    if (session) mostrarKiosco(); else mostrarLogin();
-}
+// Este observador reemplaza a la función checkSession(). 
+// Se ejecuta automáticamente al abrir o recargar la página.
+clienteSupabase.auth.onAuthStateChange((event, session) => {
+    if (session) {
+        mostrarKiosco();
+    } else {
+        mostrarLogin();
+    }
+});
 
 document.getElementById('btn-login').addEventListener('click', async () => {
     const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
     const loginMsg = document.getElementById('login-msg');
     loginMsg.textContent = "Verificando credenciales...";
+    
     const { error } = await clienteSupabase.auth.signInWithPassword({ email, password });
     if (error) loginMsg.textContent = "Error: " + error.message; 
-    else { loginMsg.textContent = ""; mostrarKiosco(); }
+    else { loginMsg.textContent = ""; } // El onAuthStateChange hará el cambio visual automáticamente
 });
 
 document.getElementById('btn-logout').addEventListener('click', async () => {
-    await clienteSupabase.auth.signOut(); mostrarLogin();
+    await clienteSupabase.auth.signOut(); 
+    // El onAuthStateChange hará el cambio al login automáticamente
 });
 
 // =========================================================
@@ -267,7 +282,7 @@ async function generarReporte() {
         });
 
         gA += a; gP += p; gF += f;
-        const btnEditar = `<button onclick="abrirModalEdicion(${doc.id}, '${doc.nombres}', '${doc.apellidos}', ${doc.estado_activo})" class="btn-manage" title="Ajustes">⚙️</button>`;
+        const btnEditar = `<button onclick="abrirModalEdicion(${doc.id}, '${doc.nombres}', '${doc.apellidos}', ${doc.estado_activo})" class="btn-manage" title="Ajustes">⚙️ Ajustes</button>`;
 
         html += `<tr class="${inact}">
             <td class="col-fija fix-1">${i + 1}</td>
@@ -384,7 +399,7 @@ window.toggleDiaSuspendido = function(fecha, isSuspended) {
     if (isSuspended) {
         abrirModalConfirmacion(
             `¿Reactivar el ${fecha}?`, 
-            `Se quitará el bloqueo del calendario y se restaurarán los estados que estaban guardados sin alterar el historial de datos.`, 
+            `Se quitará el bloqueo del calendario y se restaurarán los estados guardados sin alterar el historial.`, 
             async () => {
                 document.getElementById('tabla-excel-container').innerHTML = "<p style='padding: 20px; color: #10b981;'>Reactivando día...</p>";
                 await clienteSupabase.from('dias_suspendidos').delete().eq('fecha', fecha);
@@ -394,7 +409,7 @@ window.toggleDiaSuspendido = function(fecha, isSuspended) {
     } else {
         abrirModalConfirmacion(
             `¿Suspender el ${fecha}?`, 
-            `Se deshabilitará el acceso en el Kiosco de entrada y se inmovilizarán las celdas de este día. Los datos originales se conservarán protegidos.`, 
+            `Se deshabilitará el Kiosco ese día y se inmovilizarán las celdas. Los datos originales se conservarán protegidos.`, 
             async () => {
                 document.getElementById('tabla-excel-container').innerHTML = "<p style='padding: 20px; color: #f59e0b;'>Suspendiendo día...</p>";
                 await clienteSupabase.from('dias_suspendidos').insert([{ fecha: fecha }]);
@@ -453,6 +468,3 @@ document.getElementById('btn-exportar-csv').addEventListener('click', () => {
     const link = document.createElement("a"); link.href = url; link.setAttribute("download", "Matriz_Asistencias.xlsx");
     document.body.appendChild(link); link.click(); document.body.removeChild(link); window.URL.revokeObjectURL(url);
 });
-
-// Iniciamos la sesión
-checkSession();
