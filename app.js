@@ -4,7 +4,6 @@
 const SUPABASE_URL = 'https://iamemtvpoguqveskpaaa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhbWVtdHZwb2d1cXZlc2twYWFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNzY3MjIsImV4cCI6MjA5ODc1MjcyMn0.vdQTiZkCTsI61V1FbuLXMzJfbnz3n6LwGQ_E_GPmsXo';
 
-// Forzamos explícitamente el uso de localStorage para evitar bloqueos en GitHub Pages
 const clienteSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: {
         persistSession: true,
@@ -26,7 +25,7 @@ const bloqueConfirmacion = document.getElementById('bloque-confirmacion');
 let docentePendiente = null;
 
 // =========================================================
-// 3. UTILIDADES (Cargadas al inicio para evitar errores)
+// 3. UTILIDADES 
 // =========================================================
 function resetearKioscoUI() { 
     docentePendiente = null; 
@@ -57,14 +56,22 @@ function mostrarAlerta(el, msg, bg, txt) {
 }
 
 // =========================================================
-// 4. CONTROL DE SESIÓN EN TIEMPO REAL (NUEVO)
+// 4. CONTROL DE SESIÓN EN TIEMPO REAL (CORREGIDO)
 // =========================================================
-// Este observador reemplaza a la función checkSession(). 
-// Se ejecuta automáticamente al abrir o recargar la página.
-clienteSupabase.auth.onAuthStateChange((event, session) => {
+async function verificarSesionInicial() {
+    const { data: { session } } = await clienteSupabase.auth.getSession();
     if (session) {
         mostrarKiosco();
     } else {
+        mostrarLogin();
+    }
+}
+verificarSesionInicial();
+
+clienteSupabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN') {
+        mostrarKiosco();
+    } else if (event === 'SIGNED_OUT') {
         mostrarLogin();
     }
 });
@@ -77,12 +84,11 @@ document.getElementById('btn-login').addEventListener('click', async () => {
     
     const { error } = await clienteSupabase.auth.signInWithPassword({ email, password });
     if (error) loginMsg.textContent = "Error: " + error.message; 
-    else { loginMsg.textContent = ""; } // El onAuthStateChange hará el cambio visual automáticamente
+    else loginMsg.textContent = ""; 
 });
 
 document.getElementById('btn-logout').addEventListener('click', async () => {
     await clienteSupabase.auth.signOut(); 
-    // El onAuthStateChange hará el cambio al login automáticamente
 });
 
 // =========================================================
@@ -216,7 +222,10 @@ async function generarReporte() {
 
     const arrayDiasSuspendidos = diasSusp ? diasSusp.map(d => d.fecha) : [];
     const fechas = obtenerSabados();
-    const hoyStr = new Date().toISOString().split('T')[0];
+    
+    // CORRECCIÓN: Usar hora local en lugar de UTC para no desfasar la selección visual del día actual
+    const ahoraLocal = new Date();
+    const hoyStr = `${ahoraLocal.getFullYear()}-${String(ahoraLocal.getMonth() + 1).padStart(2, '0')}-${String(ahoraLocal.getDate()).padStart(2, '0')}`;
     
     let sabadoObjetivo = fechas[fechas.length - 1]; 
     for (let i = 0; i < fechas.length; i++) { if (fechas[i] >= hoyStr) { sabadoObjetivo = fechas[i]; break; } }
@@ -282,7 +291,7 @@ async function generarReporte() {
         });
 
         gA += a; gP += p; gF += f;
-        const btnEditar = `<button onclick="abrirModalEdicion(${doc.id}, '${doc.nombres}', '${doc.apellidos}', ${doc.estado_activo})" class="btn-manage" title="Ajustes">⚙️ Ajustes</button>`;
+        const btnEditar = `<button onclick="abrirModalEdicion(${doc.id}, '${doc.nombres}', '${doc.apellidos}', ${doc.estado_activo})" class="btn-manage" title="Ajustes">⚙️</button>`;
 
         html += `<tr class="${inact}">
             <td class="col-fija fix-1">${i + 1}</td>
@@ -424,7 +433,12 @@ window.toggleDiaSuspendido = function(fecha, isSuspended) {
 // =========================================================
 document.getElementById('buscador-docente').addEventListener('input', (e) => {
     const term = e.target.value.toLowerCase().trim();
-    document.querySelectorAll('#tabla-exportar tbody tr').forEach(fila => { fila.classList.toggle('hidden', !fila.innerText.toLowerCase().includes(term)); });
+    document.querySelectorAll('#tabla-exportar tbody tr').forEach(fila => { 
+        // CORRECCIÓN: Búsqueda específica en Nombre (fix-2) y PIN (fix-3)
+        const nombre = fila.querySelector('.fix-2')?.textContent.toLowerCase() || '';
+        const pin = fila.querySelector('.fix-3')?.textContent.toLowerCase() || '';
+        fila.classList.toggle('hidden', !(nombre.includes(term) || pin.includes(term))); 
+    });
 });
 
 function dibujarGrafica(a, p, f) {

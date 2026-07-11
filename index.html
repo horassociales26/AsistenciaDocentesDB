@@ -85,6 +85,18 @@
         <button id="btn-volver-kiosco" class="btn-tab" style="width: 100%; border: 1px solid var(--slate-200);">Volver al Kiosco de Entrada</button>
     </div>
 
+    <!-- MODAL DE CONFIRMACIÓN (NUEVO) -->
+    <div id="modal-confirmacion" class="modal-overlay hidden" style="z-index: 9999;">
+        <div class="modal-card">
+            <h3 id="modal-confirm-titulo" style="color: var(--slate-900); margin-bottom: 10px; font-size: 18px; font-weight: 700;"></h3>
+            <p id="modal-confirm-mensaje" style="color: var(--slate-600); font-size: 14px; margin-bottom: 20px;"></p>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button id="btn-confirm-ok" class="btn-primary" style="flex: 1;">Aceptar</button>
+                <button id="btn-confirm-cancelar" class="btn-tab" style="flex: 1; border: 1px solid var(--slate-200);">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
     <div id="modal-edicion" class="modal-overlay hidden">
         <div class="modal-card">
             <h3 style="color: var(--slate-900); margin-bottom: 15px; font-size: 18px; font-weight: 700;">Gestión de Docente</h3>
