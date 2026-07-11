@@ -56,7 +56,7 @@ function mostrarAlerta(el, msg, bg, txt) {
 }
 
 // =========================================================
-// 4. CONTROL DE SESIÓN EN TIEMPO REAL (CORREGIDO)
+// 4. CONTROL DE SESIÓN EN TIEMPO REAL
 // =========================================================
 async function verificarSesionInicial() {
     const { data: { session } } = await clienteSupabase.auth.getSession();
@@ -99,7 +99,7 @@ pinInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') verificarP
 
 async function verificarPIN() {
     const pin = pinInput.value.trim();
-    if (pin.length !== 3) { mostrarAlerta(statusMsg, "El PIN debe tener 3 dígitos.", "#ef4444", "white"); pinInput.focus(); return; }
+    if (pin.length !== 3) { mostrarAlerta(statusMsg, "El código debe tener 3 dígitos (ej. 001).", "#ef4444", "white"); pinInput.focus(); return; }
 
     const ahora = new Date();
     const fechaLocal = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
@@ -113,9 +113,10 @@ async function verificarPIN() {
         pinInput.value = ""; pinInput.focus(); return; 
     }
 
-    const { data: docente, error } = await clienteSupabase.from('docentes').select('id, nombres, apellidos, estado_activo').eq('pin', parseInt(pin)).single();
+    // Se convierte a entero base 10 para buscar en la base de datos (ej. "001" -> 1)
+    const { data: docente, error } = await clienteSupabase.from('docentes').select('id, nombres, apellidos, estado_activo').eq('pin', parseInt(pin, 10)).single();
 
-    if (error || !docente) { mostrarAlerta(statusMsg, "PIN no encontrado.", "#ef4444", "white"); pinInput.value = ""; pinInput.focus(); return; }
+    if (error || !docente) { mostrarAlerta(statusMsg, "Código no encontrado.", "#ef4444", "white"); pinInput.value = ""; pinInput.focus(); return; }
     if (!docente.estado_activo) { mostrarAlerta(statusMsg, "Usuario inactivo. Consulte coordinación.", "#f59e0b", "white"); pinInput.value = ""; pinInput.focus(); return; }
 
     docentePendiente = docente;
@@ -157,16 +158,37 @@ document.getElementById('btn-volver-kiosco').addEventListener('click', mostrarKi
 tabReporte.addEventListener('click', () => { secNuevo.classList.add('hidden'); secReporte.classList.remove('hidden'); tabNuevo.classList.remove('active-tab'); tabReporte.classList.add('active-tab'); generarReporte(); });
 tabNuevo.addEventListener('click', () => { secReporte.classList.add('hidden'); secNuevo.classList.remove('hidden'); tabReporte.classList.remove('active-tab'); tabNuevo.classList.add('active-tab'); document.getElementById('nuevo-nombres').value = ""; document.getElementById('nuevo-apellidos').value = ""; document.getElementById('admin-msg').innerHTML = ""; });
 
+// Lógica de generación de PIN correlativo
 document.getElementById('btn-guardar-docente').addEventListener('click', async () => {
     const inputN = document.getElementById('nuevo-nombres'); const inputA = document.getElementById('nuevo-apellidos'); const msg = document.getElementById('admin-msg');
     if (!inputN.value.trim() || !inputA.value.trim()) { msg.innerHTML = "<span style='color:red;'>Complete ambos campos.</span>"; return; }
     
-    msg.innerHTML = "<span style='color:var(--brand-blue);'>Generando código...</span>";
-    let pinUnico = false; let nuevoPin = 0;
-    while (!pinUnico) { nuevoPin = Math.floor(Math.random() * 900) + 100; const { data } = await clienteSupabase.from('docentes').select('id').eq('pin', nuevoPin); if (data && data.length === 0) pinUnico = true; }
+    msg.innerHTML = "<span style='color:var(--brand-blue);'>Generando código correlativo...</span>";
+    
+    // Obtenemos el PIN más alto registrado actualmente en la base de datos
+    const { data: maxPinData, error: errMax } = await clienteSupabase
+        .from('docentes')
+        .select('pin')
+        .order('pin', { ascending: false })
+        .limit(1);
+
+    let nuevoPin = 1; // Por defecto inicia en 1
+    if (maxPinData && maxPinData.length > 0 && maxPinData[0].pin) {
+        nuevoPin = parseInt(maxPinData[0].pin, 10) + 1; // Sumamos 1 al máximo encontrado
+    }
+
+    // Formateamos visualmente a 3 dígitos (ej. 1 -> "001")
+    const pinFormateado = String(nuevoPin).padStart(3, '0');
 
     const { error } = await clienteSupabase.from('docentes').insert([{ nombres: inputN.value.trim(), apellidos: inputA.value.trim(), pin: nuevoPin, estado_activo: true }]);
-    if (error) msg.innerHTML = "<span style='color:red;'>Error al guardar.</span>"; else { msg.innerHTML = `Registro exitoso. PIN Asignado: <span style="font-size:24px; color:#10b981; display:block; margin-top:5px; font-weight:bold;">${nuevoPin}</span>`; inputN.value = ""; inputA.value = ""; }
+    
+    if (error) {
+        msg.innerHTML = "<span style='color:red;'>Error al guardar.</span>"; 
+    } else { 
+        msg.innerHTML = `Registro exitoso. Código Asignado: <span style="font-size:24px; color:#10b981; display:block; margin-top:5px; font-weight:bold;">${pinFormateado}</span>`; 
+        inputN.value = ""; 
+        inputA.value = ""; 
+    }
 });
 
 const modalEdicion = document.getElementById('modal-edicion');
@@ -223,7 +245,6 @@ async function generarReporte() {
     const arrayDiasSuspendidos = diasSusp ? diasSusp.map(d => d.fecha) : [];
     const fechas = obtenerSabados();
     
-    // CORRECCIÓN: Usar hora local en lugar de UTC para no desfasar la selección visual del día actual
     const ahoraLocal = new Date();
     const hoyStr = `${ahoraLocal.getFullYear()}-${String(ahoraLocal.getMonth() + 1).padStart(2, '0')}-${String(ahoraLocal.getDate()).padStart(2, '0')}`;
     
@@ -235,7 +256,7 @@ async function generarReporte() {
     let html = `<table class="matrix-table" id="tabla-exportar"><thead><tr>
         <th class="col-fija fix-1">N°</th>
         <th class="col-fija fix-2">Docente</th>
-        <th class="col-fija fix-3">PIN</th>
+        <th class="col-fija fix-3">CÓDIGO</th>
         <th class="col-fija fix-4">A</th>
         <th class="col-fija fix-5">P</th>
         <th class="col-fija fix-6">F</th>
@@ -263,6 +284,9 @@ async function generarReporte() {
         const inact = doc.estado_activo === false ? "fila-inactiva" : "";
         const badgeInactivo = doc.estado_activo === false ? `<span class="badge-inactivo">INACTIVO</span>` : "";
         const nombreCompleto = `${doc.apellidos}, ${doc.nombres}`;
+        
+        // Formateamos el PIN a 3 dígitos para mostrarlo en la tabla
+        const pinMostrar = String(doc.pin).padStart(3, '0');
 
         let celdasFechas = "";
         fechas.forEach(fecha => {
@@ -296,7 +320,7 @@ async function generarReporte() {
         html += `<tr class="${inact}">
             <td class="col-fija fix-1">${i + 1}</td>
             <td class="col-fija fix-2" title="${nombreCompleto}"><div style="display: flex; justify-content: space-between; align-items: center; width: 100%;"><span style="overflow: hidden; text-overflow: ellipsis;">${nombreCompleto}</span>${badgeInactivo}</div></td>
-            <td class="col-fija fix-3">${doc.pin}</td>
+            <td class="col-fija fix-3">${pinMostrar}</td>
             <td class="col-fija fix-4 val-a">${a}</td>
             <td class="col-fija fix-5 val-p">${p}</td>
             <td class="col-fija fix-6 val-f">${f}</td>
@@ -434,7 +458,6 @@ window.toggleDiaSuspendido = function(fecha, isSuspended) {
 document.getElementById('buscador-docente').addEventListener('input', (e) => {
     const term = e.target.value.toLowerCase().trim();
     document.querySelectorAll('#tabla-exportar tbody tr').forEach(fila => { 
-        // CORRECCIÓN: Búsqueda específica en Nombre (fix-2) y PIN (fix-3)
         const nombre = fila.querySelector('.fix-2')?.textContent.toLowerCase() || '';
         const pin = fila.querySelector('.fix-3')?.textContent.toLowerCase() || '';
         fila.classList.toggle('hidden', !(nombre.includes(term) || pin.includes(term))); 

@@ -62,7 +62,7 @@
 
         <div id="sec-reporte" class="admin-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin: 15px 0; flex-wrap: wrap; gap: 15px;">
-                <input type="text" id="buscador-docente" placeholder="🔍 Buscar por nombre completo o PIN asignado..." style="width: 100%; max-width: 380px; margin-bottom: 0; background-color: #fff; border: 1px solid var(--slate-300);">
+                <input type="text" id="buscador-docente" placeholder="🔍 Buscar por nombre completo o código asignado..." style="width: 100%; max-width: 380px; margin-bottom: 0; background-color: #fff; border: 1px solid var(--slate-300);">
                 <button id="btn-exportar-csv" class="btn-primary" style="background-color: #24292f;"><svg style="vertical-align:middle; margin-right:5px;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4M7 10l5 5 5-5M12 15V3"/></svg> Exportar a Excel (.xlsx)</button>
             </div>
             
@@ -77,7 +77,7 @@
             <h3 class="subtitle">Registrar Nuevo Docente en el Sistema</h3>
             <input type="text" id="nuevo-nombres" placeholder="Nombres del Profesor" required autocomplete="off">
             <input type="text" id="nuevo-apellidos" placeholder="Apellidos del Profesor" required autocomplete="off">
-            <button id="btn-guardar-docente" class="btn-primary" style="width: 100%; padding: 12px;">Guardar y Generar PIN</button>
+            <button id="btn-guardar-docente" class="btn-primary" style="width: 100%; padding: 12px;">Guardar y Generar Código</button>
             <div id="admin-msg" class="msg-status"></div>
         </div>
 
@@ -85,7 +85,6 @@
         <button id="btn-volver-kiosco" class="btn-tab" style="width: 100%; border: 1px solid var(--slate-200);">Volver al Kiosco de Entrada</button>
     </div>
 
-    <!-- MODAL DE CONFIRMACIÓN (NUEVO) -->
     <div id="modal-confirmacion" class="modal-overlay hidden" style="z-index: 9999;">
         <div class="modal-card">
             <h3 id="modal-confirm-titulo" style="color: var(--slate-900); margin-bottom: 10px; font-size: 18px; font-weight: 700;"></h3>
