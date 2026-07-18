@@ -72,17 +72,20 @@ document.getElementById('buscador-logs').addEventListener('input', (e) => {
 });
 
 // =========================================================
-// 4. CONTROL DE SESIÓN Y TIEMPO DE INACTIVIDAD (15 MIN)
+// 4. CONTROL DE SESIÓN Y ROL
 // =========================================================
 const TIEMPO_EXPIRACION_MINUTOS = 15;
 function actualizarActividad() { localStorage.setItem('ultima_actividad', Date.now()); }
 
+// EVALUACIÓN DE ROL ACTUALIZADA (Visualización de botones GOD)
 function evaluarRolYMostrar(sessionEmail) {
     emailUsuarioActual = sessionEmail;
     if (emailUsuarioActual === CORREO_ADMIN_GOD) {
         document.getElementById('tab-logs').style.display = 'block';
+        document.getElementById('btn-eliminar-docente').style.display = 'block'; // Activar botón de borrar
     } else {
         document.getElementById('tab-logs').style.display = 'none';
+        document.getElementById('btn-eliminar-docente').style.display = 'none'; // Ocultar para admins normales
     }
 }
 
@@ -124,6 +127,7 @@ clienteSupabase.auth.onAuthStateChange((event, session) => {
         localStorage.removeItem('ultima_actividad'); localStorage.removeItem('vista_actual');
         emailUsuarioActual = "Desconocido";
         document.getElementById('tab-logs').style.display = 'none';
+        document.getElementById('btn-eliminar-docente').style.display = 'none';
         mostrarLogin();
     }
 });
@@ -207,19 +211,18 @@ document.getElementById('btn-no').addEventListener('click', () => { mostrarAlert
 const secNuevo = document.getElementById('sec-nuevo'); 
 const secReporte = document.getElementById('sec-reporte');
 const secLogs = document.getElementById('sec-logs');
-const secPermiso = document.getElementById('sec-permiso'); // Nueva Sección
+const secPermiso = document.getElementById('sec-permiso');
 
 const tabNuevo = document.getElementById('tab-nuevo'); 
 const tabReporte = document.getElementById('tab-reporte');
 const tabLogs = document.getElementById('tab-logs');
-const tabPermiso = document.getElementById('tab-permiso'); // Nueva Pestaña
+const tabPermiso = document.getElementById('tab-permiso'); 
 
 function irAlAdminPanel() {
     loginContainer.classList.add('hidden'); 
     kioscoContainer.classList.add('hidden'); 
     adminContainer.classList.remove('hidden'); 
     
-    // Esconder todas y mostrar solo Reporte
     secNuevo.classList.add('hidden'); secLogs.classList.add('hidden'); secPermiso.classList.add('hidden'); secReporte.classList.remove('hidden'); 
     tabNuevo.classList.remove('active-tab'); tabLogs.classList.remove('active-tab'); tabPermiso.classList.remove('active-tab'); tabReporte.classList.add('active-tab'); 
     
@@ -230,7 +233,6 @@ function irAlAdminPanel() {
 document.getElementById('btn-ir-admin').addEventListener('click', irAlAdminPanel);
 document.getElementById('btn-volver-kiosco').addEventListener('click', () => { localStorage.setItem('vista_actual', 'kiosco'); mostrarKiosco(); });
 
-// Eventos Pestañas
 tabReporte.addEventListener('click', () => { 
     secNuevo.classList.add('hidden'); secLogs.classList.add('hidden'); secPermiso.classList.add('hidden'); secReporte.classList.remove('hidden'); 
     tabNuevo.classList.remove('active-tab'); tabLogs.classList.remove('active-tab'); tabPermiso.classList.remove('active-tab'); tabReporte.classList.add('active-tab'); 
@@ -246,8 +248,6 @@ tabLogs.addEventListener('click', () => {
     tabReporte.classList.remove('active-tab'); tabNuevo.classList.remove('active-tab'); tabPermiso.classList.remove('active-tab'); tabLogs.classList.add('active-tab');
     cargarAuditoria();
 });
-
-// ===== NUEVO: Pestaña Permiso =====
 tabPermiso.addEventListener('click', () => {
     secReporte.classList.add('hidden'); secNuevo.classList.add('hidden'); secLogs.classList.add('hidden'); secPermiso.classList.remove('hidden');
     tabReporte.classList.remove('active-tab'); tabNuevo.classList.remove('active-tab'); tabLogs.classList.remove('active-tab'); tabPermiso.classList.add('active-tab');
@@ -258,8 +258,6 @@ tabPermiso.addEventListener('click', () => {
 function llenarFechasPermiso() {
     const selectFecha = document.getElementById('permiso-fecha');
     const fechas = obtenerSabados();
-    
-    // Calcular sábado objetivo (próximo o actual) para pre-seleccionarlo
     const ahoraLocal = new Date();
     const hoyStr = `${ahoraLocal.getFullYear()}-${String(ahoraLocal.getMonth() + 1).padStart(2, '0')}-${String(ahoraLocal.getDate()).padStart(2, '0')}`;
     let sabadoObjetivo = fechas[fechas.length - 1]; 
@@ -290,7 +288,6 @@ document.getElementById('btn-guardar-permiso').addEventListener('click', async (
     if (error || !docente) { msg.innerHTML = "<span style='color:red;'>Código PIN no encontrado en la base de datos.</span>"; return; }
     if (!docente.estado_activo) { msg.innerHTML = "<span style='color:red;'>El docente está inactivo.</span>"; return; }
     
-    // Reemplazamos cualquier asistencia previa por el permiso
     await clienteSupabase.from('asistencias').delete().eq('docente_id', docente.id).eq('fecha', fecha);
     const { error: errInsert } = await clienteSupabase.from('asistencias').insert([{ docente_id: docente.id, fecha: fecha, estado: 'permiso', hora: "13:00:00" }]);
     
@@ -300,30 +297,48 @@ document.getElementById('btn-guardar-permiso').addEventListener('click', async (
         msg.innerHTML = `Permiso asignado con éxito a: <span style="font-size:16px; color:#10b981; display:block; margin-top:5px; font-weight:bold;">${docente.nombres} ${docente.apellidos}</span>`;
         registrarLog(`Asignó PERMISO por formulario rápido (PIN ${pinVal}) al docente: ${docente.nombres} ${docente.apellidos} para la fecha: ${fecha}`);
         document.getElementById('permiso-pin').value = "";
-        
-        // Regenerar la matriz de fondo por si vuelven a esa pestaña
         generarReporte();
     }
 });
 
-
+// FUNCIÓN ACTUALIZADA: REVISA DUPLICADOS ANTES DE GUARDAR
 document.getElementById('btn-guardar-docente').addEventListener('click', async () => {
-    const inputN = document.getElementById('nuevo-nombres'); const inputA = document.getElementById('nuevo-apellidos'); const msg = document.getElementById('admin-msg');
-    if (!inputN.value.trim() || !inputA.value.trim()) { msg.innerHTML = "<span style='color:red;'>Complete ambos campos.</span>"; return; }
+    const inputN = document.getElementById('nuevo-nombres').value.trim(); 
+    const inputA = document.getElementById('nuevo-apellidos').value.trim(); 
+    const msg = document.getElementById('admin-msg');
     
+    if (!inputN || !inputA) { msg.innerHTML = "<span style='color:red;'>Complete ambos campos.</span>"; return; }
+    
+    msg.innerHTML = "<span style='color:var(--brand-blue);'>Verificando datos...</span>";
+    
+    // Consulta para validar si ya existe alguien con exactamente los mismos nombres y apellidos (ignora mayúsculas)
+    const { data: duplicados } = await clienteSupabase
+        .from('docentes')
+        .select('pin')
+        .ilike('nombres', inputN)
+        .ilike('apellidos', inputA)
+        .limit(1);
+
+    // Si encuentra un duplicado, detiene la operación y muestra la alerta con el PIN
+    if (duplicados && duplicados.length > 0) {
+        const pinExistente = String(duplicados[0].pin).padStart(3, '0');
+        msg.innerHTML = `<span style="color:#ef4444; font-weight:bold;">Ya existe un registro con estos nombres, su código es ${pinExistente}</span>`;
+        return;
+    }
+
     msg.innerHTML = "<span style='color:var(--brand-blue);'>Generando código correlativo...</span>";
     
     const { data: maxPinData } = await clienteSupabase.from('docentes').select('pin').order('pin', { ascending: false }).limit(1);
     let nuevoPin = 1; if (maxPinData && maxPinData.length > 0 && maxPinData[0].pin) nuevoPin = parseInt(maxPinData[0].pin, 10) + 1; 
 
     const pinFormateado = String(nuevoPin).padStart(3, '0');
-    const { error } = await clienteSupabase.from('docentes').insert([{ nombres: inputN.value.trim(), apellidos: inputA.value.trim(), pin: nuevoPin, estado_activo: true }]);
+    const { error } = await clienteSupabase.from('docentes').insert([{ nombres: inputN, apellidos: inputA, pin: nuevoPin, estado_activo: true }]);
     
     if (error) msg.innerHTML = "<span style='color:red;'>Error al guardar.</span>"; 
     else { 
         msg.innerHTML = `Registro exitoso. Código Asignado: <span style="font-size:24px; color:#10b981; display:block; margin-top:5px; font-weight:bold;">${pinFormateado}</span>`;
-        registrarLog(`Registró un nuevo docente: ${inputN.value.trim()} ${inputA.value.trim()} (Se le asignó el PIN: ${pinFormateado})`);
-        inputN.value = ""; inputA.value = ""; 
+        registrarLog(`Registró un nuevo docente: ${inputN} ${inputA} (Se le asignó el PIN: ${pinFormateado})`);
+        document.getElementById('nuevo-nombres').value = ""; document.getElementById('nuevo-apellidos').value = ""; 
     }
 });
 
@@ -352,6 +367,26 @@ document.getElementById('btn-guardar-edicion').addEventListener('click', async (
         registrarLog(`Editó la información/estado del docente: ${n} ${a} (Nuevo estado activo: ${estado})`);
         modalEdicion.classList.add('hidden'); generarReporte(); 
     }
+});
+
+// FUNCIONALIDAD PARA ELIMINAR DOCENTES (Solo Admin GOD)
+document.getElementById('btn-eliminar-docente').addEventListener('click', async () => {
+    abrirModalConfirmacion(
+        "¿Eliminar docente?", 
+        `¿Desea eliminar a este docente y todo su historial de forma permanente?`, 
+        async () => {
+            document.getElementById('btn-eliminar-docente').textContent = "Borrando...";
+            // Primero borra asistencias ligadas para evitar error de llaves foráneas
+            await clienteSupabase.from('asistencias').delete().eq('docente_id', editId.value);
+            // Luego borra al docente
+            await clienteSupabase.from('docentes').delete().eq('id', editId.value);
+            
+            document.getElementById('btn-eliminar-docente').textContent = "Eliminar";
+            registrarLog(`Eliminó de forma permanente al docente: ${editNombres.value} ${editApellidos.value}`);
+            modalEdicion.classList.add('hidden'); 
+            generarReporte();
+        }
+    );
 });
 
 // =========================================================

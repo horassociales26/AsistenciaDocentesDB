@@ -55,7 +55,6 @@
     <div id="admin-container" class="container wide hidden">
         <h2 style="text-align: left; margin-bottom: 20px;">Panel Maestro de Gestión</h2>
         
-        <!-- PESTAÑAS DEL MENÚ ACTUALIZADAS -->
         <div class="admin-menu" style="display: flex; gap: 5px; justify-content: flex-start; border-bottom: 1px solid var(--slate-200); padding-bottom: 10px; flex-wrap: wrap;">
             <button id="tab-reporte" class="btn-tab active-tab">Matriz General</button>
             <button id="tab-permiso" class="btn-tab">📝 Registrar Permiso</button>
@@ -178,7 +177,8 @@
             </div>
 
             <div style="display: flex; gap: 10px; margin-bottom: 12px;">
-                <button id="btn-guardar-edicion" class="btn-primary" style="width: 100%;">Guardar Cambios</button>
+                <button id="btn-guardar-edicion" class="btn-primary" style="flex: 2;">Guardar Cambios</button>
+                <button id="btn-eliminar-docente" class="btn-danger" style="background-color: #ef4444; flex: 1; display: none;">Eliminar</button>
             </div>
             <button id="btn-cerrar-modal" class="btn-tab" style="width: 100%; border: 1px solid var(--slate-200); color: var(--slate-600);">Cancelar</button>
         </div>
