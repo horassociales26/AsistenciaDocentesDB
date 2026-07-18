@@ -3,7 +3,7 @@
 // =========================================================
 const SUPABASE_URL = 'https://iamemtvpoguqveskpaaa.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhbWVtdHZwb2d1cXZlc2twYWFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMxNzY3MjIsImV4cCI6MjA5ODc1MjcyMn0.vdQTiZkCTsI61V1FbuLXMzJfbnz3n6LwGQ_E_GPmsXo';
-const CORREO_ADMIN_GOD = 'adminsup@hr.com'; 
+const CORREO_ADMIN_GOD = 'adminsup@hr.com';
 
 const clienteSupabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: true, autoRefreshToken: true, storage: window.localStorage }
@@ -24,30 +24,22 @@ const bloqueConfirmacion = document.getElementById('bloque-confirmacion');
 let docentePendiente = null;
 
 // =========================================================
-// 3. SISTEMA DE BITÁCORA (LOGS SILENCIOSOS)
+// 3. SISTEMA DE BITÁCORA Y CAMBIO DE CLAVE
 // =========================================================
 async function registrarLog(accion) {
     if (emailUsuarioActual === "Desconocido") return;
-    try {
-        await clienteSupabase.from('registro_logs').insert([
-            { usuario: emailUsuarioActual, accion: accion }
-        ]);
-    } catch (err) { console.error("Error guardando log", err); }
+    try { await clienteSupabase.from('registro_logs').insert([{ usuario: emailUsuarioActual, accion: accion }]); } 
+    catch (err) { console.error("Error guardando log", err); }
 }
 
 async function cargarAuditoria() {
     const tbody = document.getElementById('tabla-logs-body');
     tbody.innerHTML = "<tr><td colspan='3' style='padding:20px; text-align:center;'>Cargando bitácora...</td></tr>";
-    
     document.getElementById('buscador-logs').value = "";
     
-    const { data, error } = await clienteSupabase.from('registro_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200);
-        
-    if (error) { tbody.innerHTML = "<tr><td colspan='3' style='color:red;'>Error al conectar con la base de datos de auditoría.</td></tr>"; return; }
-    if (data.length === 0) { tbody.innerHTML = "<tr><td colspan='3'>No hay registros de actividad.</td></tr>"; return; }
+    const { data, error } = await clienteSupabase.from('registro_logs').select('*').order('created_at', { ascending: false }).limit(200);
+    if (error) { tbody.innerHTML = "<tr><td colspan='3' style='color:red;'>Error de conexión.</td></tr>"; return; }
+    if (data.length === 0) { tbody.innerHTML = "<tr><td colspan='3'>No hay registros.</td></tr>"; return; }
 
     let html = "";
     data.forEach(log => {
@@ -71,21 +63,61 @@ document.getElementById('buscador-logs').addEventListener('input', (e) => {
     });
 });
 
+// MODAL DE CAMBIO DE CONTRASEÑA
+const modalPwd = document.getElementById('modal-pwd');
+document.getElementById('btn-abrir-pwd').addEventListener('click', () => {
+    document.getElementById('pwd-actual').value = ""; document.getElementById('pwd-nueva').value = ""; document.getElementById('pwd-msg').innerHTML = "";
+    modalPwd.classList.remove('hidden');
+});
+document.getElementById('btn-cerrar-pwd').addEventListener('click', () => modalPwd.classList.add('hidden'));
+
+document.getElementById('btn-guardar-pwd').addEventListener('click', async () => {
+    const actual = document.getElementById('pwd-actual').value;
+    const nueva = document.getElementById('pwd-nueva').value;
+    const msg = document.getElementById('pwd-msg');
+
+    if (!actual || !nueva) { msg.innerHTML = "<span style='color:red;'>Complete ambos campos.</span>"; return; }
+    if (nueva.length < 6) { msg.innerHTML = "<span style='color:red;'>La nueva debe tener mínimo 6 caracteres.</span>"; return; }
+
+    msg.innerHTML = "<span style='color:var(--brand-blue);'>Verificando...</span>";
+    document.getElementById('btn-guardar-pwd').disabled = true;
+
+    // TRUCO DE SEGURIDAD: Intentar "iniciar sesión" internamente para probar si la clave actual es correcta
+    const { error: errVerify } = await clienteSupabase.auth.signInWithPassword({ email: emailUsuarioActual, password: actual });
+
+    if (errVerify) {
+        msg.innerHTML = "<span style='color:red;'>La contraseña actual es incorrecta.</span>";
+        document.getElementById('btn-guardar-pwd').disabled = false; return;
+    }
+
+    // Si la clave es correcta, se procede a guardar la nueva
+    const { error: errUpdate } = await clienteSupabase.auth.updateUser({ password: nueva });
+    document.getElementById('btn-guardar-pwd').disabled = false;
+
+    if (errUpdate) {
+        msg.innerHTML = "<span style='color:red;'>Error al actualizar.</span>";
+    } else {
+        registrarLog("Actualizó su propia contraseña de acceso.");
+        msg.innerHTML = "<span style='color:#10b981; font-weight:bold;'>¡Contraseña actualizada con éxito!</span>";
+        setTimeout(() => { modalPwd.classList.add('hidden'); }, 2000);
+    }
+});
+
+
 // =========================================================
 // 4. CONTROL DE SESIÓN Y ROL
 // =========================================================
 const TIEMPO_EXPIRACION_MINUTOS = 15;
 function actualizarActividad() { localStorage.setItem('ultima_actividad', Date.now()); }
 
-// EVALUACIÓN DE ROL ACTUALIZADA (Visualización de botones GOD)
 function evaluarRolYMostrar(sessionEmail) {
     emailUsuarioActual = sessionEmail;
     if (emailUsuarioActual === CORREO_ADMIN_GOD) {
         document.getElementById('tab-logs').style.display = 'block';
-        document.getElementById('btn-eliminar-docente').style.display = 'block'; // Activar botón de borrar
+        document.getElementById('btn-eliminar-docente').style.display = 'block'; 
     } else {
         document.getElementById('tab-logs').style.display = 'none';
-        document.getElementById('btn-eliminar-docente').style.display = 'none'; // Ocultar para admins normales
+        document.getElementById('btn-eliminar-docente').style.display = 'none'; 
     }
 }
 
@@ -301,7 +333,7 @@ document.getElementById('btn-guardar-permiso').addEventListener('click', async (
     }
 });
 
-// FUNCIÓN ACTUALIZADA: REVISA DUPLICADOS ANTES DE GUARDAR
+// FUNCIÓN PARA REGISTRAR DOCENTES (CON FILTRO DE DUPLICADOS)
 document.getElementById('btn-guardar-docente').addEventListener('click', async () => {
     const inputN = document.getElementById('nuevo-nombres').value.trim(); 
     const inputA = document.getElementById('nuevo-apellidos').value.trim(); 
@@ -311,15 +343,8 @@ document.getElementById('btn-guardar-docente').addEventListener('click', async (
     
     msg.innerHTML = "<span style='color:var(--brand-blue);'>Verificando datos...</span>";
     
-    // Consulta para validar si ya existe alguien con exactamente los mismos nombres y apellidos (ignora mayúsculas)
-    const { data: duplicados } = await clienteSupabase
-        .from('docentes')
-        .select('pin')
-        .ilike('nombres', inputN)
-        .ilike('apellidos', inputA)
-        .limit(1);
+    const { data: duplicados } = await clienteSupabase.from('docentes').select('pin').ilike('nombres', inputN).ilike('apellidos', inputA).limit(1);
 
-    // Si encuentra un duplicado, detiene la operación y muestra la alerta con el PIN
     if (duplicados && duplicados.length > 0) {
         const pinExistente = String(duplicados[0].pin).padStart(3, '0');
         msg.innerHTML = `<span style="color:#ef4444; font-weight:bold;">Ya existe un registro con estos nombres, su código es ${pinExistente}</span>`;
@@ -371,20 +396,13 @@ document.getElementById('btn-guardar-edicion').addEventListener('click', async (
 
 // FUNCIONALIDAD PARA ELIMINAR DOCENTES (Solo Admin GOD)
 document.getElementById('btn-eliminar-docente').addEventListener('click', async () => {
-    abrirModalConfirmacion(
-        "¿Eliminar docente?", 
-        `¿Desea eliminar a este docente y todo su historial de forma permanente?`, 
-        async () => {
+    abrirModalConfirmacion("¿Eliminar docente?", `¿Desea eliminar a este docente y todo su historial de forma permanente?`, async () => {
             document.getElementById('btn-eliminar-docente').textContent = "Borrando...";
-            // Primero borra asistencias ligadas para evitar error de llaves foráneas
             await clienteSupabase.from('asistencias').delete().eq('docente_id', editId.value);
-            // Luego borra al docente
             await clienteSupabase.from('docentes').delete().eq('id', editId.value);
-            
             document.getElementById('btn-eliminar-docente').textContent = "Eliminar";
             registrarLog(`Eliminó de forma permanente al docente: ${editNombres.value} ${editApellidos.value}`);
-            modalEdicion.classList.add('hidden'); 
-            generarReporte();
+            modalEdicion.classList.add('hidden'); generarReporte();
         }
     );
 });
