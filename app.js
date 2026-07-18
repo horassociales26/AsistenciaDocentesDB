@@ -39,13 +39,12 @@ async function cargarAuditoria() {
     const tbody = document.getElementById('tabla-logs-body');
     tbody.innerHTML = "<tr><td colspan='3' style='padding:20px; text-align:center;'>Cargando bitácora...</td></tr>";
     
-    // Limpiamos el buscador de logs cada vez que se recarga la tabla
     document.getElementById('buscador-logs').value = "";
     
     const { data, error } = await clienteSupabase.from('registro_logs')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(200); // Trae los últimos 200 registros
+        .limit(200);
         
     if (error) { tbody.innerHTML = "<tr><td colspan='3' style='color:red;'>Error al conectar con la base de datos de auditoría.</td></tr>"; return; }
     if (data.length === 0) { tbody.innerHTML = "<tr><td colspan='3'>No hay registros de actividad.</td></tr>"; return; }
@@ -63,11 +62,10 @@ async function cargarAuditoria() {
     tbody.innerHTML = html;
 }
 
-// Filtro en tiempo real para los logs por usuario
 document.getElementById('buscador-logs').addEventListener('input', (e) => {
     const term = e.target.value.toLowerCase().trim();
     document.querySelectorAll('#tabla-logs-body tr').forEach(fila => {
-        if (fila.cells.length < 3) return; // Ignora la fila de "Cargando" si existe
+        if (fila.cells.length < 3) return;
         const usuario = fila.cells[1].textContent.toLowerCase();
         fila.classList.toggle('hidden', !usuario.includes(term));
     });
@@ -144,14 +142,13 @@ document.getElementById('btn-login').addEventListener('click', async () => {
 });
 document.getElementById('btn-logout').addEventListener('click', async () => { registrarLog("Cerró sesión manualmente."); await clienteSupabase.auth.signOut(); });
 
-// Funciones UI Generales
 function resetearKioscoUI() { docentePendiente = null; pinInput.value = ""; bloqueConfirmacion.classList.add('hidden'); bloqueIngreso.classList.remove('hidden'); pinInput.focus(); }
 function mostrarKiosco() { loginContainer.classList.add('hidden'); adminContainer.classList.add('hidden'); kioscoContainer.classList.remove('hidden'); resetearKioscoUI(); }
 function mostrarLogin() { loginContainer.classList.remove('hidden'); kioscoContainer.classList.add('hidden'); adminContainer.classList.add('hidden'); }
 function mostrarAlerta(el, msg, bg, txt) { el.textContent = msg; el.style.backgroundColor = bg; el.style.color = txt; setTimeout(() => el.textContent="", 3500); }
 
 // =========================================================
-// 5. LÓGICA DEL KIOSCO 
+// 5. LÓGICA DEL KIOSCO (ASISTENCIA)
 // =========================================================
 document.getElementById('btn-marcar').addEventListener('click', verificarPIN);
 pinInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') verificarPIN(); });
@@ -196,7 +193,7 @@ document.getElementById('btn-si').addEventListener('click', async () => {
         document.getElementById('exito-hora').textContent = `Hora de entrada: ${horaAmigable}`;
         document.getElementById('tarjeta-exito').classList.remove('hidden');
         
-        registrarLog(`Validó PIN y marcó asistencia para el docente: ${docentePendiente.nombres} ${docentePendiente.apellidos}`);
+        registrarLog(`Validó PIN y marcó ASISTENCIA para el docente: ${docentePendiente.nombres} ${docentePendiente.apellidos}`);
         
         setTimeout(() => { document.getElementById('tarjeta-exito').classList.add('hidden'); resetearKioscoUI(); }, 3500);
     }
@@ -210,19 +207,22 @@ document.getElementById('btn-no').addEventListener('click', () => { mostrarAlert
 const secNuevo = document.getElementById('sec-nuevo'); 
 const secReporte = document.getElementById('sec-reporte');
 const secLogs = document.getElementById('sec-logs');
+const secPermiso = document.getElementById('sec-permiso'); // Nueva Sección
 
 const tabNuevo = document.getElementById('tab-nuevo'); 
 const tabReporte = document.getElementById('tab-reporte');
 const tabLogs = document.getElementById('tab-logs');
+const tabPermiso = document.getElementById('tab-permiso'); // Nueva Pestaña
 
 function irAlAdminPanel() {
-    // AQUÍ ESTABA EL ERROR DE LA IMAGEN: Ahora obligamos a esconder el login siempre
     loginContainer.classList.add('hidden'); 
     kioscoContainer.classList.add('hidden'); 
     adminContainer.classList.remove('hidden'); 
     
-    secNuevo.classList.add('hidden'); secLogs.classList.add('hidden'); secReporte.classList.remove('hidden'); 
-    tabNuevo.classList.remove('active-tab'); tabLogs.classList.remove('active-tab'); tabReporte.classList.add('active-tab'); 
+    // Esconder todas y mostrar solo Reporte
+    secNuevo.classList.add('hidden'); secLogs.classList.add('hidden'); secPermiso.classList.add('hidden'); secReporte.classList.remove('hidden'); 
+    tabNuevo.classList.remove('active-tab'); tabLogs.classList.remove('active-tab'); tabPermiso.classList.remove('active-tab'); tabReporte.classList.add('active-tab'); 
+    
     document.getElementById('admin-msg').innerHTML = ""; generarReporte();
     localStorage.setItem('vista_actual', 'admin');
 }
@@ -230,16 +230,81 @@ function irAlAdminPanel() {
 document.getElementById('btn-ir-admin').addEventListener('click', irAlAdminPanel);
 document.getElementById('btn-volver-kiosco').addEventListener('click', () => { localStorage.setItem('vista_actual', 'kiosco'); mostrarKiosco(); });
 
-tabReporte.addEventListener('click', () => { secNuevo.classList.add('hidden'); secLogs.classList.add('hidden'); secReporte.classList.remove('hidden'); tabNuevo.classList.remove('active-tab'); tabLogs.classList.remove('active-tab'); tabReporte.classList.add('active-tab'); generarReporte(); });
-tabNuevo.addEventListener('click', () => { secReporte.classList.add('hidden'); secLogs.classList.add('hidden'); secNuevo.classList.remove('hidden'); tabReporte.classList.remove('active-tab'); tabLogs.classList.remove('active-tab'); tabNuevo.classList.add('active-tab'); document.getElementById('nuevo-nombres').value = ""; document.getElementById('nuevo-apellidos').value = ""; document.getElementById('admin-msg').innerHTML = ""; });
-
-// Eventos de la pestaña de LOGS
+// Eventos Pestañas
+tabReporte.addEventListener('click', () => { 
+    secNuevo.classList.add('hidden'); secLogs.classList.add('hidden'); secPermiso.classList.add('hidden'); secReporte.classList.remove('hidden'); 
+    tabNuevo.classList.remove('active-tab'); tabLogs.classList.remove('active-tab'); tabPermiso.classList.remove('active-tab'); tabReporte.classList.add('active-tab'); 
+    generarReporte(); 
+});
+tabNuevo.addEventListener('click', () => { 
+    secReporte.classList.add('hidden'); secLogs.classList.add('hidden'); secPermiso.classList.add('hidden'); secNuevo.classList.remove('hidden'); 
+    tabReporte.classList.remove('active-tab'); tabLogs.classList.remove('active-tab'); tabPermiso.classList.remove('active-tab'); tabNuevo.classList.add('active-tab'); 
+    document.getElementById('nuevo-nombres').value = ""; document.getElementById('nuevo-apellidos').value = ""; document.getElementById('admin-msg').innerHTML = ""; 
+});
 tabLogs.addEventListener('click', () => {
-    secReporte.classList.add('hidden'); secNuevo.classList.add('hidden'); secLogs.classList.remove('hidden');
-    tabReporte.classList.remove('active-tab'); tabNuevo.classList.remove('active-tab'); tabLogs.classList.add('active-tab');
+    secReporte.classList.add('hidden'); secNuevo.classList.add('hidden'); secPermiso.classList.add('hidden'); secLogs.classList.remove('hidden');
+    tabReporte.classList.remove('active-tab'); tabNuevo.classList.remove('active-tab'); tabPermiso.classList.remove('active-tab'); tabLogs.classList.add('active-tab');
     cargarAuditoria();
 });
-document.getElementById('btn-recargar-logs').addEventListener('click', cargarAuditoria);
+
+// ===== NUEVO: Pestaña Permiso =====
+tabPermiso.addEventListener('click', () => {
+    secReporte.classList.add('hidden'); secNuevo.classList.add('hidden'); secLogs.classList.add('hidden'); secPermiso.classList.remove('hidden');
+    tabReporte.classList.remove('active-tab'); tabNuevo.classList.remove('active-tab'); tabLogs.classList.remove('active-tab'); tabPermiso.classList.add('active-tab');
+    document.getElementById('permiso-pin').value = ""; document.getElementById('permiso-msg').innerHTML = "";
+    llenarFechasPermiso();
+});
+
+function llenarFechasPermiso() {
+    const selectFecha = document.getElementById('permiso-fecha');
+    const fechas = obtenerSabados();
+    
+    // Calcular sábado objetivo (próximo o actual) para pre-seleccionarlo
+    const ahoraLocal = new Date();
+    const hoyStr = `${ahoraLocal.getFullYear()}-${String(ahoraLocal.getMonth() + 1).padStart(2, '0')}-${String(ahoraLocal.getDate()).padStart(2, '0')}`;
+    let sabadoObjetivo = fechas[fechas.length - 1]; 
+    for (let i = 0; i < fechas.length; i++) { if (fechas[i] >= hoyStr) { sabadoObjetivo = fechas[i]; break; } }
+
+    let html = "";
+    fechas.forEach(f => {
+        const d = f.split('-'); const dateObj = new Date(d[0], d[1]-1, d[2]);
+        const text = dateObj.toLocaleDateString('es-SV', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        const textCapitalized = text.charAt(0).toUpperCase() + text.slice(1);
+        const selected = (f === sabadoObjetivo) ? 'selected' : '';
+        html += `<option value="${f}" ${selected}>${textCapitalized}</option>`;
+    });
+    selectFecha.innerHTML = html;
+}
+
+document.getElementById('btn-guardar-permiso').addEventListener('click', async () => {
+    const pinVal = document.getElementById('permiso-pin').value.trim();
+    const fecha = document.getElementById('permiso-fecha').value;
+    const msg = document.getElementById('permiso-msg');
+    
+    if (pinVal.length !== 3) { msg.innerHTML = "<span style='color:red;'>Ingrese un PIN válido de 3 dígitos.</span>"; return; }
+    if (!fecha) { msg.innerHTML = "<span style='color:red;'>Seleccione una fecha.</span>"; return; }
+    
+    msg.innerHTML = "<span style='color:var(--brand-blue);'>Verificando docente...</span>";
+    
+    const { data: docente, error } = await clienteSupabase.from('docentes').select('id, nombres, apellidos, estado_activo').eq('pin', parseInt(pinVal, 10)).single();
+    if (error || !docente) { msg.innerHTML = "<span style='color:red;'>Código PIN no encontrado en la base de datos.</span>"; return; }
+    if (!docente.estado_activo) { msg.innerHTML = "<span style='color:red;'>El docente está inactivo.</span>"; return; }
+    
+    // Reemplazamos cualquier asistencia previa por el permiso
+    await clienteSupabase.from('asistencias').delete().eq('docente_id', docente.id).eq('fecha', fecha);
+    const { error: errInsert } = await clienteSupabase.from('asistencias').insert([{ docente_id: docente.id, fecha: fecha, estado: 'permiso', hora: "13:00:00" }]);
+    
+    if (errInsert) {
+        msg.innerHTML = "<span style='color:red;'>Error al guardar el permiso.</span>";
+    } else {
+        msg.innerHTML = `Permiso asignado con éxito a: <span style="font-size:16px; color:#10b981; display:block; margin-top:5px; font-weight:bold;">${docente.nombres} ${docente.apellidos}</span>`;
+        registrarLog(`Asignó PERMISO por formulario rápido (PIN ${pinVal}) al docente: ${docente.nombres} ${docente.apellidos} para la fecha: ${fecha}`);
+        document.getElementById('permiso-pin').value = "";
+        
+        // Regenerar la matriz de fondo por si vuelven a esa pestaña
+        generarReporte();
+    }
+});
 
 
 document.getElementById('btn-guardar-docente').addEventListener('click', async () => {
