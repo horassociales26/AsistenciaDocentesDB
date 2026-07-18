@@ -11,7 +11,8 @@
 </head>
 <body>
 
-    <div id="login-container" class="container">
+    <!-- Cambio aplicado: Se agregó 'hidden' por defecto para evitar parpadeos -->
+    <div id="login-container" class="container hidden">
         <h2>Acceso de Administrador</h2>
         <p class="subtitle">Ingrese sus credenciales para gestionar el sistema</p>
         <input type="email" id="email" placeholder="Correo electrónico" required autocomplete="email">
@@ -55,11 +56,13 @@
     <div id="admin-container" class="container wide hidden">
         <h2 style="text-align: left; margin-bottom: 20px;">Panel Maestro de Gestión</h2>
         
-        <div class="admin-menu" style="justify-content: flex-start; border-bottom: 1px solid var(--slate-200); padding-bottom: 10px;">
+        <div class="admin-menu" style="display: flex; gap: 5px; justify-content: flex-start; border-bottom: 1px solid var(--slate-200); padding-bottom: 10px; flex-wrap: wrap;">
             <button id="tab-reporte" class="btn-tab active-tab">Matriz General</button>
             <button id="tab-nuevo" class="btn-tab">➕ Agregar Docente</button>
+            <button id="tab-logs" class="btn-tab" style="display: none; border-left: 2px solid var(--slate-300); margin-left: 10px; border-radius: 0 8px 8px 0;">📜 Auditoría (Logs)</button>
         </div>
 
+        <!-- SECCIÓN 1: MATRIZ -->
         <div id="sec-reporte" class="admin-section">
             <div style="display: flex; justify-content: space-between; align-items: center; margin: 15px 0; flex-wrap: wrap; gap: 15px;">
                 <input type="text" id="buscador-docente" placeholder="🔍 Buscar por nombre completo o código asignado..." style="width: 100%; max-width: 380px; margin-bottom: 0; background-color: #fff; border: 1px solid var(--slate-300);">
@@ -68,17 +71,45 @@
             
             <div id="tabla-excel-container" class="table-wrapper"></div>
             
-            <div style="width: 100%; max-width: 320px; margin: 25px auto 0 auto;">
+            <div style="width: 100%; max-width: 320px; margin: 35px auto 10px auto; padding-top: 25px; border-top: 1px dashed var(--slate-300);">
+                <h4 style="text-align: center; color: var(--slate-500); margin-bottom: 15px; font-weight: 600; font-size: 14px;">Resumen Global de Asistencias</h4>
                 <canvas id="grafica-asistencia"></canvas>
             </div>
         </div>
 
+        <!-- SECCIÓN 2: NUEVO DOCENTE -->
         <div id="sec-nuevo" class="admin-section hidden" style="max-width: 460px; margin: 30px auto;">
             <h3 class="subtitle">Registrar Nuevo Docente en el Sistema</h3>
             <input type="text" id="nuevo-nombres" placeholder="Nombres del Profesor" required autocomplete="off">
             <input type="text" id="nuevo-apellidos" placeholder="Apellidos del Profesor" required autocomplete="off">
             <button id="btn-guardar-docente" class="btn-primary" style="width: 100%; padding: 12px;">Guardar y Generar Código</button>
             <div id="admin-msg" class="msg-status"></div>
+        </div>
+
+        <!-- SECCIÓN 3: LOGS DE AUDITORÍA -->
+        <div id="sec-logs" class="admin-section hidden" style="margin: 20px 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                <h3 style="color: var(--slate-700); font-size: 16px; margin: 0;">Bitácora de Movimientos</h3>
+                <!-- Buscador de Logs añadido -->
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; flex: 1;">
+                    <input type="text" id="buscador-logs" placeholder="🔍 Buscar por correo del administrador..." style="width: 100%; max-width: 320px; margin-bottom: 0; background-color: #fff; border: 1px solid var(--slate-300);">
+                    <button id="btn-recargar-logs" class="btn-tab" style="border: 1px solid var(--slate-300);">🔄 Actualizar</button>
+                </div>
+            </div>
+            <div class="table-wrapper" style="max-height: 60vh;">
+                <table class="matrix-table" style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th style="text-align: left; padding-left: 15px;">Fecha y Hora</th>
+                            <th style="text-align: left;">Usuario / Administrador</th>
+                            <th style="text-align: left;">Acción Realizada</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-logs-body">
+                        <tr><td colspan="3">Cargando bitácora...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <hr style="border: 0; height: 1px; background: #e2e8f0; margin: 20px 0;">
@@ -109,15 +140,28 @@
                 <input type="text" id="edit-nombres" class="modal-input">
 
                 <label class="modal-label">Estado en el Sistema:</label>
-                <select id="edit-estado" class="modal-input" style="font-weight: 600;">
-                    <option value="true">Activo (Permite marcar asistencia)</option>
-                    <option value="false">Inactivo (Bloquea acceso al kiosco)</option>
-                </select>
+                <div class="status-toggle-container">
+                    <label class="toggle-option">
+                        <input type="radio" name="edit-estado-radio" value="true">
+                        <div class="toggle-card success">
+                            <span class="icon">✅</span>
+                            <strong>Activo</strong>
+                            <small>Permite marcar</small>
+                        </div>
+                    </label>
+                    <label class="toggle-option">
+                        <input type="radio" name="edit-estado-radio" value="false">
+                        <div class="toggle-card danger">
+                            <span class="icon">🚫</span>
+                            <strong>Inactivo</strong>
+                            <small>Bloquea acceso</small>
+                        </div>
+                    </label>
+                </div>
             </div>
 
             <div style="display: flex; gap: 10px; margin-bottom: 12px;">
-                <button id="btn-guardar-edicion" class="btn-primary" style="flex: 2;">Guardar Cambios</button>
-                <button id="btn-eliminar-docente" class="btn-danger" style="background-color: #ef4444; flex: 1;">Eliminar</button>
+                <button id="btn-guardar-edicion" class="btn-primary" style="width: 100%;">Guardar Cambios</button>
             </div>
             <button id="btn-cerrar-modal" class="btn-tab" style="width: 100%; border: 1px solid var(--slate-200); color: var(--slate-600);">Cancelar</button>
         </div>
