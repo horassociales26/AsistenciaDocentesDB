@@ -160,3 +160,53 @@ button:active { transform: scale(0.98); }
 .modal-card { background: white; padding: 30px; border-radius: 12px; width: 90%; max-width: 360px; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.15); animation: slideDown 0.15s ease-out; text-align: center; border: 1px solid var(--slate-200); }
 .modal-label { font-weight: 700; font-size: 11px; color: var(--slate-600); display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
 @keyframes slideDown { from { transform: translateY(-12px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* =========================================================
+   RESPONSIVO PARA MÓVILES (Pegar al final de styles.css)
+   ========================================================= */
+@media (max-width: 768px) {
+    .container.wide {
+        width: 100%;
+        max-width: 100%;
+        padding: 10px;
+    }
+
+    .matrix-table td, .matrix-table th {
+        padding: 6px 4px;
+        font-size: 10px;
+    }
+
+    
+    .fix-1 { left: 0; min-width: 25px; max-width: 25px; } 
+    .fix-2 { left: 25px; min-width: 110px; max-width: 110px; font-size: 10px; }
+    .fix-3 { left: 135px; min-width: 45px; max-width: 45px; font-size: 9px; } 
+    .fix-4 { left: 180px; min-width: 28px; max-width: 28px; } 
+    .fix-5 { left: 208px; min-width: 28px; max-width: 28px; } 
+    .fix-6 { left: 236px; min-width: 28px; max-width: 28px; } 
+    .fix-7 { left: 264px; min-width: 38px; max-width: 38px; }
+
+    
+    .select-asistencia, .badge-suspendida {
+        width: 22px;
+        font-size: 9px;
+        padding: 2px 0;
+    }
+    
+    .btn-manage {
+        padding: 4px;
+        font-size: 10px;
+        width: auto;
+    }
+
+    .m-badge {
+        width: auto;
+        padding: 1px 3px;
+        font-size: 8px;
+    }
+
+    .badge-inactivo {
+        font-size: 7px;
+        padding: 2px 4px;
+        margin-left: 2px;
+    }
+}
