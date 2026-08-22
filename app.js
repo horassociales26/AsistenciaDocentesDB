@@ -262,27 +262,50 @@ async function interceptarBaneados() {
 // =========================================================
 
 // --- SINTETIZADOR DE AUDIO (FEEDBACK) ---
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+// Usamos una variable global segura para que no dé errores de duplicado
+window.miAudioCtx = window.miAudioCtx || null; 
+
 function emitirSonido(tipo) {
-    if(audioCtx.state === 'suspended') audioCtx.resume();
-    const osc = audioCtx.createOscillator();
-    const ganancia = audioCtx.createGain();
-    osc.connect(ganancia); ganancia.connect(audioCtx.destination);
+    // Inicializar el motor de audio SOLO al hacer clic (evita bloqueos del navegador)
+    if (!window.miAudioCtx) {
+        window.miAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (window.miAudioCtx.state === 'suspended') window.miAudioCtx.resume();
+    
+    const osc = window.miAudioCtx.createOscillator();
+    const ganancia = window.miAudioCtx.createGain();
+    osc.connect(ganancia); 
+    ganancia.connect(window.miAudioCtx.destination);
     
     if (tipo === 'exito') {
-        osc.type = 'sine'; // Sonido suave y agudo
-        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
-        ganancia.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        ganancia.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
-        osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+        // Onda 'square' (cuadrada): súper ruidosa y penetrante
+        osc.type = 'square'; 
+        
+        // VOLUMEN AL 100%
+        ganancia.gain.setValueAtTime(1.0, window.miAudioCtx.currentTime);
+        
+        // Efecto "Level Up" / Victoria (3 notas súper rápidas ascendentes)
+        osc.frequency.setValueAtTime(440, window.miAudioCtx.currentTime);
+        osc.frequency.setValueAtTime(554.37, window.miAudioCtx.currentTime + 0.1); 
+        osc.frequency.setValueAtTime(659.25, window.miAudioCtx.currentTime + 0.2); 
+        
+        // Corte seco
+        ganancia.gain.setValueAtTime(1.0, window.miAudioCtx.currentTime + 0.3);
+        ganancia.gain.exponentialRampToValueAtTime(0.01, window.miAudioCtx.currentTime + 0.4);
+        
+        osc.start(window.miAudioCtx.currentTime); 
+        osc.stop(window.miAudioCtx.currentTime + 0.4);
+        
     } else if (tipo === 'error') {
-        osc.type = 'sawtooth'; // Sonido grave de "buzzer"
-        osc.frequency.setValueAtTime(300, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.2);
-        ganancia.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        ganancia.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
-        osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+        osc.type = 'sawtooth'; // Sonido grave de error
+        osc.frequency.setValueAtTime(300, window.miAudioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(150, window.miAudioCtx.currentTime + 0.2);
+        
+        ganancia.gain.setValueAtTime(0.7, window.miAudioCtx.currentTime); 
+        ganancia.gain.exponentialRampToValueAtTime(0.01, window.miAudioCtx.currentTime + 0.2);
+        
+        osc.start(); 
+        osc.stop(window.miAudioCtx.currentTime + 0.2);
     }
 }
 
