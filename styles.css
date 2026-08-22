@@ -210,3 +210,26 @@ button:active { transform: scale(0.98); }
         margin-left: 2px;
     }
 }
+
+/* =========================================================
+   DASHBOARD DE RESUMEN Y ALERTAS DE FALTAS
+   ========================================================= */
+.dashboard-cards { display: flex; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; }
+.dash-card { flex: 1; min-width: 120px; background: white; padding: 15px 20px; border-radius: 10px; border: 1px solid var(--slate-200); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
+.dash-title { display: block; font-size: 11px; color: var(--slate-500); font-weight: 700; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; }
+.dash-val { font-size: 26px; font-weight: 800; color: var(--slate-800); line-height: 1; }
+
+.dash-card.success { border-left: 4px solid #10b981; }
+.dash-card.warning { border-left: 4px solid #f59e0b; }
+.dash-card.danger { border-left: 4px solid #ef4444; }
+
+/* FILA EN ALERTA ROJA (3 faltas seguidas) */
+.alerta-faltas td { background-color: #fef2f2 !important; border-bottom: 1px solid #fecaca !important; }
+.alerta-faltas .fix-2 { color: #b91c1c !important; }
+.icon-alerta { margin-left: 6px; font-size: 13px; cursor: help; animation: palpitar 2s infinite; display: inline-block; }
+
+@keyframes palpitar {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+}

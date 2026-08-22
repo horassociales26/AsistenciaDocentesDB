@@ -114,17 +114,38 @@ function evaluarRolYMostrar(sessionEmail) {
     emailUsuarioActual = sessionEmail;
     if (emailUsuarioActual === CORREO_ADMIN_GOD) {
         document.getElementById('tab-logs').style.display = 'block';
+        document.getElementById('tab-godmode').style.display = 'block';
         document.getElementById('btn-eliminar-docente').style.display = 'block'; 
     } else {
         document.getElementById('tab-logs').style.display = 'none';
+        document.getElementById('tab-godmode').style.display = 'none';
         document.getElementById('btn-eliminar-docente').style.display = 'none'; 
     }
+}
+
+async function validarSeguridadUsuario(email) {
+    let { data } = await clienteSupabase.from('estado_usuarios').select('estado_activo').eq('email', email).maybeSingle();
+    
+    if (data) {
+        return data.estado_activo; 
+    }
+    return true; 
 }
 
 async function verificarSesionInicial() {
     const { data: { session } } = await clienteSupabase.auth.getSession();
     
     if (session) {
+        // Validación obligatoria aunque ya tengan la sesión abierta
+        const esActivo = await validarSeguridadUsuario(session.user.email);
+        if (!esActivo) {
+            await clienteSupabase.auth.signOut();
+            localStorage.removeItem('ultima_actividad');
+            mostrarLogin();
+            mostrarAlerta(document.getElementById('login-msg'), "Tu cuenta ha sido suspendida temporalmente.", "#ef4444", "white");
+            return;
+        }
+
         evaluarRolYMostrar(session.user.email);
         const ultimaActividad = localStorage.getItem('ultima_actividad');
         const ahora = Date.now();
@@ -149,8 +170,15 @@ async function verificarSesionInicial() {
 }
 verificarSesionInicial();
 
-clienteSupabase.auth.onAuthStateChange((event, session) => {
+clienteSupabase.auth.onAuthStateChange(async (event, session) => {
     if (event === 'SIGNED_IN') {
+        const esActivo = await validarSeguridadUsuario(session.user.email);
+        if (!esActivo) {
+            await clienteSupabase.auth.signOut();
+            mostrarLogin();
+            mostrarAlerta(document.getElementById('login-msg'), "Cuenta suspendida.", "#ef4444", "white");
+            return;
+        }
         actualizarActividad();
         evaluarRolYMostrar(session.user.email);
         const vista = localStorage.getItem('vista_actual');
@@ -159,23 +187,45 @@ clienteSupabase.auth.onAuthStateChange((event, session) => {
         localStorage.removeItem('ultima_actividad'); localStorage.removeItem('vista_actual');
         emailUsuarioActual = "Desconocido";
         document.getElementById('tab-logs').style.display = 'none';
+        document.getElementById('tab-godmode').style.display = 'none';
         document.getElementById('btn-eliminar-docente').style.display = 'none';
         mostrarLogin();
     }
 });
 
-document.addEventListener('click', () => { if (loginContainer.classList.contains('hidden')) actualizarActividad(); });
-
 document.getElementById('btn-login').addEventListener('click', async () => {
     const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
     const loginMsg = document.getElementById('login-msg');
-    loginMsg.textContent = "Verificando credenciales...";
     
+    if (!email || !password) {
+        loginMsg.textContent = "Ingrese correo y contraseña.";
+        return;
+    }
+
+    loginMsg.textContent = "Revisando permisos de seguridad...";
+    
+    // 1. EL CADENERO: Preguntamos a la base de datos si está baneado ANTES de loguearlo
+    const esActivo = await validarSeguridadUsuario(email);
+    
+    if (!esActivo) {
+        loginMsg.textContent = "Tu cuenta ha sido suspendida temporalmente.";
+        return; // Detenemos el código aquí. Nunca inicia sesión.
+    }
+    
+    // 2. Si pasó el cadenero, ahora sí revisamos que la contraseña esté correcta
+    loginMsg.textContent = "Verificando credenciales...";
     const { error } = await clienteSupabase.auth.signInWithPassword({ email, password });
-    if (error) loginMsg.textContent = "Error: " + error.message; 
-    else { loginMsg.textContent = ""; localStorage.setItem('vista_actual', 'admin'); registrarLog("Inició sesión en el sistema."); }
+    
+    if (error) {
+        loginMsg.textContent = "Error: " + error.message; 
+    } else {
+        loginMsg.textContent = ""; 
+        localStorage.setItem('vista_actual', 'admin'); 
+        registrarLog("Inició sesión en el sistema."); 
+    }
 });
+
 document.getElementById('btn-logout').addEventListener('click', async () => { registrarLog("Cerró sesión manualmente."); await clienteSupabase.auth.signOut(); });
 
 function resetearKioscoUI() { docentePendiente = null; pinInput.value = ""; bloqueConfirmacion.classList.add('hidden'); bloqueIngreso.classList.remove('hidden'); pinInput.focus(); }
@@ -186,25 +236,51 @@ function mostrarAlerta(el, msg, bg, txt) { el.textContent = msg; el.style.backgr
 // =========================================================
 // 5. LÓGICA DEL KIOSCO (ASISTENCIA)
 // =========================================================
+
+// --- SINTETIZADOR DE AUDIO (FEEDBACK) ---
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function emitirSonido(tipo) {
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const ganancia = audioCtx.createGain();
+    osc.connect(ganancia); ganancia.connect(audioCtx.destination);
+    
+    if (tipo === 'exito') {
+        osc.type = 'sine'; // Sonido suave y agudo
+        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+        ganancia.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        ganancia.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+    } else if (tipo === 'error') {
+        osc.type = 'sawtooth'; // Sonido grave de "buzzer"
+        osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(150, audioCtx.currentTime + 0.2);
+        ganancia.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        ganancia.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+    }
+}
+
 document.getElementById('btn-marcar').addEventListener('click', verificarPIN);
 pinInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') verificarPIN(); });
 
 async function verificarPIN() {
     const pin = pinInput.value.trim();
-    if (pin.length !== 3) { mostrarAlerta(statusMsg, "El código debe tener 3 dígitos (ej. 001).", "#ef4444", "white"); pinInput.focus(); return; }
+    if (pin.length !== 3) { emitirSonido('error'); mostrarAlerta(statusMsg, "El código debe tener 3 dígitos (ej. 001).", "#ef4444", "white"); pinInput.focus(); return; }
 
     const ahora = new Date();
     const fechaLocal = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
     
-    if (ahora.getDay() !== 6) { mostrarAlerta(statusMsg, "El kiosco solo registra asistencias los sábados.", "#ef4444", "white"); pinInput.value = ""; pinInput.focus(); return; }
-    if (ahora.getHours() < 6 || ahora.getHours() >= 13) { mostrarAlerta(statusMsg, "Horario finalizado (6 AM - 1 PM).", "#ef4444", "white"); pinInput.value = ""; pinInput.focus(); return; }
+    if (ahora.getDay() !== 6) { emitirSonido('error'); mostrarAlerta(statusMsg, "El kiosco solo registra asistencias los sábados.", "#ef4444", "white"); pinInput.value = ""; pinInput.focus(); return; }
+    if (ahora.getHours() < 6 || ahora.getHours() >= 13) { emitirSonido('error'); mostrarAlerta(statusMsg, "Horario finalizado (6 AM - 1 PM).", "#ef4444", "white"); pinInput.value = ""; pinInput.focus(); return; }
 
     const { data: diaSusp } = await clienteSupabase.from('dias_suspendidos').select('fecha').eq('fecha', fechaLocal);
-    if (diaSusp && diaSusp.length > 0) { mostrarAlerta(statusMsg, "Las clases están suspendidas el día de hoy.", "#f59e0b", "white"); pinInput.value = ""; pinInput.focus(); return; }
+    if (diaSusp && diaSusp.length > 0) { emitirSonido('error'); mostrarAlerta(statusMsg, "Las clases están suspendidas el día de hoy.", "#f59e0b", "white"); pinInput.value = ""; pinInput.focus(); return; }
 
     const { data: docente, error } = await clienteSupabase.from('docentes').select('id, nombres, apellidos, estado_activo').eq('pin', parseInt(pin, 10)).single();
-    if (error || !docente) { mostrarAlerta(statusMsg, "Código no encontrado.", "#ef4444", "white"); pinInput.value = ""; pinInput.focus(); return; }
-    if (!docente.estado_activo) { mostrarAlerta(statusMsg, "Usuario inactivo. Consulte coordinación.", "#f59e0b", "white"); pinInput.value = ""; pinInput.focus(); return; }
+    if (error || !docente) { emitirSonido('error'); mostrarAlerta(statusMsg, "Código no encontrado.", "#ef4444", "white"); pinInput.value = ""; pinInput.focus(); return; }
+    if (!docente.estado_activo) { emitirSonido('error'); mostrarAlerta(statusMsg, "Usuario inactivo. Consulte coordinación.", "#f59e0b", "white"); pinInput.value = ""; pinInput.focus(); return; }
 
     docentePendiente = docente;
     document.getElementById('nombre-confirmacion').textContent = `${docente.nombres} ${docente.apellidos}`;
@@ -220,10 +296,12 @@ document.getElementById('btn-si').addEventListener('click', async () => {
     const { error } = await clienteSupabase.from('asistencias').insert([{ docente_id: docentePendiente.id, estado: 'asistio', fecha: fechaLocal, hora: ahora.toTimeString().split(' ')[0] }]);
 
     if (error) {
+        emitirSonido('error');
         if (error.code === '23505') mostrarAlerta(statusMsg, `Ya hay un registro para hoy.`, "#f59e0b", "white");
         else mostrarAlerta(statusMsg, "Error del servidor.", "#ef4444", "white");
         resetearKioscoUI();
     } else {
+        emitirSonido('exito'); // <-- ¡Aquí suena el bip de victoria!
         bloqueConfirmacion.classList.add('hidden');
         document.getElementById('exito-nombre').textContent = `${docentePendiente.nombres}`;
         document.getElementById('exito-hora').textContent = `Hora de entrada: ${horaAmigable}`;
@@ -244,20 +322,29 @@ const secNuevo = document.getElementById('sec-nuevo');
 const secReporte = document.getElementById('sec-reporte');
 const secLogs = document.getElementById('sec-logs');
 const secPermiso = document.getElementById('sec-permiso');
+const secGodMode = document.getElementById('sec-godmode');
 
 const tabNuevo = document.getElementById('tab-nuevo'); 
 const tabReporte = document.getElementById('tab-reporte');
 const tabLogs = document.getElementById('tab-logs');
 const tabPermiso = document.getElementById('tab-permiso'); 
+const tabGodMode = document.getElementById('tab-godmode');
+
+// Función maestra para evitar sobreposición visual
+function ocultarTodasLasSecciones() {
+    secNuevo.classList.add('hidden'); secReporte.classList.add('hidden'); 
+    secLogs.classList.add('hidden'); secPermiso.classList.add('hidden'); 
+    if(secGodMode) secGodMode.classList.add('hidden');
+    
+    tabNuevo.classList.remove('active-tab'); tabReporte.classList.remove('active-tab'); 
+    tabLogs.classList.remove('active-tab'); tabPermiso.classList.remove('active-tab'); 
+    if(tabGodMode) tabGodMode.classList.remove('active-tab');
+}
 
 function irAlAdminPanel() {
-    loginContainer.classList.add('hidden'); 
-    kioscoContainer.classList.add('hidden'); 
-    adminContainer.classList.remove('hidden'); 
-    
-    secNuevo.classList.add('hidden'); secLogs.classList.add('hidden'); secPermiso.classList.add('hidden'); secReporte.classList.remove('hidden'); 
-    tabNuevo.classList.remove('active-tab'); tabLogs.classList.remove('active-tab'); tabPermiso.classList.remove('active-tab'); tabReporte.classList.add('active-tab'); 
-    
+    loginContainer.classList.add('hidden'); kioscoContainer.classList.add('hidden'); adminContainer.classList.remove('hidden'); 
+    ocultarTodasLasSecciones();
+    secReporte.classList.remove('hidden'); tabReporte.classList.add('active-tab'); 
     document.getElementById('admin-msg').innerHTML = ""; generarReporte();
     localStorage.setItem('vista_actual', 'admin');
 }
@@ -265,147 +352,14 @@ function irAlAdminPanel() {
 document.getElementById('btn-ir-admin').addEventListener('click', irAlAdminPanel);
 document.getElementById('btn-volver-kiosco').addEventListener('click', () => { localStorage.setItem('vista_actual', 'kiosco'); mostrarKiosco(); });
 
-tabReporte.addEventListener('click', () => { 
-    secNuevo.classList.add('hidden'); secLogs.classList.add('hidden'); secPermiso.classList.add('hidden'); secReporte.classList.remove('hidden'); 
-    tabNuevo.classList.remove('active-tab'); tabLogs.classList.remove('active-tab'); tabPermiso.classList.remove('active-tab'); tabReporte.classList.add('active-tab'); 
-    generarReporte(); 
-});
-tabNuevo.addEventListener('click', () => { 
-    secReporte.classList.add('hidden'); secLogs.classList.add('hidden'); secPermiso.classList.add('hidden'); secNuevo.classList.remove('hidden'); 
-    tabReporte.classList.remove('active-tab'); tabLogs.classList.remove('active-tab'); tabPermiso.classList.remove('active-tab'); tabNuevo.classList.add('active-tab'); 
-    document.getElementById('nuevo-nombres').value = ""; document.getElementById('nuevo-apellidos').value = ""; document.getElementById('admin-msg').innerHTML = ""; 
-});
-tabLogs.addEventListener('click', () => {
-    secReporte.classList.add('hidden'); secNuevo.classList.add('hidden'); secPermiso.classList.add('hidden'); secLogs.classList.remove('hidden');
-    tabReporte.classList.remove('active-tab'); tabNuevo.classList.remove('active-tab'); tabPermiso.classList.remove('active-tab'); tabLogs.classList.add('active-tab');
-    cargarAuditoria();
-});
-tabPermiso.addEventListener('click', () => {
-    secReporte.classList.add('hidden'); secNuevo.classList.add('hidden'); secLogs.classList.add('hidden'); secPermiso.classList.remove('hidden');
-    tabReporte.classList.remove('active-tab'); tabNuevo.classList.remove('active-tab'); tabLogs.classList.remove('active-tab'); tabPermiso.classList.add('active-tab');
-    document.getElementById('permiso-pin').value = ""; document.getElementById('permiso-msg').innerHTML = "";
-    llenarFechasPermiso();
-});
+tabReporte.addEventListener('click', () => { ocultarTodasLasSecciones(); secReporte.classList.remove('hidden'); tabReporte.classList.add('active-tab'); generarReporte(); });
+tabNuevo.addEventListener('click', () => { ocultarTodasLasSecciones(); secNuevo.classList.remove('hidden'); tabNuevo.classList.add('active-tab'); document.getElementById('nuevo-nombres').value = ""; document.getElementById('nuevo-apellidos').value = ""; document.getElementById('admin-msg').innerHTML = ""; });
+tabLogs.addEventListener('click', () => { ocultarTodasLasSecciones(); secLogs.classList.remove('hidden'); tabLogs.classList.add('active-tab'); cargarAuditoria(); });
+tabPermiso.addEventListener('click', () => { ocultarTodasLasSecciones(); secPermiso.classList.remove('hidden'); tabPermiso.classList.add('active-tab'); document.getElementById('permiso-pin').value = ""; document.getElementById('permiso-msg').innerHTML = ""; llenarFechasPermiso(); });
 
-function llenarFechasPermiso() {
-    const selectFecha = document.getElementById('permiso-fecha');
-    const fechas = obtenerSabados();
-    const ahoraLocal = new Date();
-    const hoyStr = `${ahoraLocal.getFullYear()}-${String(ahoraLocal.getMonth() + 1).padStart(2, '0')}-${String(ahoraLocal.getDate()).padStart(2, '0')}`;
-    let sabadoObjetivo = fechas[fechas.length - 1]; 
-    for (let i = 0; i < fechas.length; i++) { if (fechas[i] >= hoyStr) { sabadoObjetivo = fechas[i]; break; } }
-
-    let html = "";
-    fechas.forEach(f => {
-        const d = f.split('-'); const dateObj = new Date(d[0], d[1]-1, d[2]);
-        const text = dateObj.toLocaleDateString('es-SV', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        const textCapitalized = text.charAt(0).toUpperCase() + text.slice(1);
-        const selected = (f === sabadoObjetivo) ? 'selected' : '';
-        html += `<option value="${f}" ${selected}>${textCapitalized}</option>`;
-    });
-    selectFecha.innerHTML = html;
+if(tabGodMode) { 
+    tabGodMode.addEventListener('click', () => { ocultarTodasLasSecciones(); secGodMode.classList.remove('hidden'); tabGodMode.classList.add('active-tab'); cargarUsuariosGodMode(); }); 
 }
-
-document.getElementById('btn-guardar-permiso').addEventListener('click', async () => {
-    const pinVal = document.getElementById('permiso-pin').value.trim();
-    const fecha = document.getElementById('permiso-fecha').value;
-    const msg = document.getElementById('permiso-msg');
-    
-    if (pinVal.length !== 3) { msg.innerHTML = "<span style='color:red;'>Ingrese un PIN válido de 3 dígitos.</span>"; return; }
-    if (!fecha) { msg.innerHTML = "<span style='color:red;'>Seleccione una fecha.</span>"; return; }
-    
-    msg.innerHTML = "<span style='color:var(--brand-blue);'>Verificando docente...</span>";
-    
-    const { data: docente, error } = await clienteSupabase.from('docentes').select('id, nombres, apellidos, estado_activo').eq('pin', parseInt(pinVal, 10)).single();
-    if (error || !docente) { msg.innerHTML = "<span style='color:red;'>Código PIN no encontrado en la base de datos.</span>"; return; }
-    if (!docente.estado_activo) { msg.innerHTML = "<span style='color:red;'>El docente está inactivo.</span>"; return; }
-    
-    await clienteSupabase.from('asistencias').delete().eq('docente_id', docente.id).eq('fecha', fecha);
-    const { error: errInsert } = await clienteSupabase.from('asistencias').insert([{ docente_id: docente.id, fecha: fecha, estado: 'permiso', hora: "13:00:00" }]);
-    
-    if (errInsert) {
-        msg.innerHTML = "<span style='color:red;'>Error al guardar el permiso.</span>";
-    } else {
-        msg.innerHTML = `Permiso asignado con éxito a: <span style="font-size:16px; color:#10b981; display:block; margin-top:5px; font-weight:bold;">${docente.nombres} ${docente.apellidos}</span>`;
-        registrarLog(`Asignó PERMISO por formulario rápido (PIN ${pinVal}) al docente: ${docente.nombres} ${docente.apellidos} para la fecha: ${fecha}`);
-        document.getElementById('permiso-pin').value = "";
-        generarReporte();
-    }
-});
-
-// FUNCIÓN PARA REGISTRAR DOCENTES (CON FILTRO DE DUPLICADOS)
-document.getElementById('btn-guardar-docente').addEventListener('click', async () => {
-    const inputN = document.getElementById('nuevo-nombres').value.trim(); 
-    const inputA = document.getElementById('nuevo-apellidos').value.trim(); 
-    const msg = document.getElementById('admin-msg');
-    
-    if (!inputN || !inputA) { msg.innerHTML = "<span style='color:red;'>Complete ambos campos.</span>"; return; }
-    
-    msg.innerHTML = "<span style='color:var(--brand-blue);'>Verificando datos...</span>";
-    
-    const { data: duplicados } = await clienteSupabase.from('docentes').select('pin').ilike('nombres', inputN).ilike('apellidos', inputA).limit(1);
-
-    if (duplicados && duplicados.length > 0) {
-        const pinExistente = String(duplicados[0].pin).padStart(3, '0');
-        msg.innerHTML = `<span style="color:#ef4444; font-weight:bold;">Ya existe un registro con estos nombres, su código es ${pinExistente}</span>`;
-        return;
-    }
-
-    msg.innerHTML = "<span style='color:var(--brand-blue);'>Generando código correlativo...</span>";
-    
-    const { data: maxPinData } = await clienteSupabase.from('docentes').select('pin').order('pin', { ascending: false }).limit(1);
-    let nuevoPin = 1; if (maxPinData && maxPinData.length > 0 && maxPinData[0].pin) nuevoPin = parseInt(maxPinData[0].pin, 10) + 1; 
-
-    const pinFormateado = String(nuevoPin).padStart(3, '0');
-    const { error } = await clienteSupabase.from('docentes').insert([{ nombres: inputN, apellidos: inputA, pin: nuevoPin, estado_activo: true }]);
-    
-    if (error) msg.innerHTML = "<span style='color:red;'>Error al guardar.</span>"; 
-    else { 
-        msg.innerHTML = `Registro exitoso. Código Asignado: <span style="font-size:24px; color:#10b981; display:block; margin-top:5px; font-weight:bold;">${pinFormateado}</span>`;
-        registrarLog(`Registró un nuevo docente: ${inputN} ${inputA} (Se le asignó el PIN: ${pinFormateado})`);
-        document.getElementById('nuevo-nombres').value = ""; document.getElementById('nuevo-apellidos').value = ""; 
-    }
-});
-
-const modalEdicion = document.getElementById('modal-edicion');
-const editId = document.getElementById('edit-id'); const editNombres = document.getElementById('edit-nombres'); const editApellidos = document.getElementById('edit-apellidos');
-
-window.abrirModalEdicion = function(id, nombres, apellidos, estadoActivo) { 
-    editId.value = id; editNombres.value = nombres; editApellidos.value = apellidos; 
-    const radios = document.getElementsByName('edit-estado-radio');
-    for (let radio of radios) { radio.checked = (radio.value === (estadoActivo ? "true" : "false")); }
-    modalEdicion.classList.remove('hidden'); 
-};
-document.getElementById('btn-cerrar-modal').addEventListener('click', () => modalEdicion.classList.add('hidden'));
-
-document.getElementById('btn-guardar-edicion').addEventListener('click', async () => {
-    const id = editId.value; const n = editNombres.value.trim(); const a = editApellidos.value.trim(); 
-    let estado = true; const radios = document.getElementsByName('edit-estado-radio');
-    for (let radio of radios) { if(radio.checked) estado = (radio.value === "true"); }
-    if(!n || !a) { alert("Los campos son obligatorios."); return; }
-    
-    document.getElementById('btn-guardar-edicion').textContent = "Guardando...";
-    const { error } = await clienteSupabase.from('docentes').update({ nombres: n, apellidos: a, estado_activo: estado }).eq('id', id);
-    document.getElementById('btn-guardar-edicion').textContent = "Guardar Cambios";
-    
-    if(error) alert("Error de conexión."); else { 
-        registrarLog(`Editó la información/estado del docente: ${n} ${a} (Nuevo estado activo: ${estado})`);
-        modalEdicion.classList.add('hidden'); generarReporte(); 
-    }
-});
-
-// FUNCIONALIDAD PARA ELIMINAR DOCENTES (Solo Admin GOD)
-document.getElementById('btn-eliminar-docente').addEventListener('click', async () => {
-    abrirModalConfirmacion("¿Eliminar docente?", `¿Desea eliminar a este docente y todo su historial de forma permanente?`, async () => {
-            document.getElementById('btn-eliminar-docente').textContent = "Borrando...";
-            await clienteSupabase.from('asistencias').delete().eq('docente_id', editId.value);
-            await clienteSupabase.from('docentes').delete().eq('id', editId.value);
-            document.getElementById('btn-eliminar-docente').textContent = "Eliminar";
-            registrarLog(`Eliminó de forma permanente al docente: ${editNombres.value} ${editApellidos.value}`);
-            modalEdicion.classList.add('hidden'); generarReporte();
-        }
-    );
-});
 
 // =========================================================
 // 7. GENERACIÓN DE MATRIZ DINÁMICA MEJORADA
@@ -416,6 +370,8 @@ function obtenerSabados() {
     while (fecha <= fin) { if (fecha.getDay() === 6) { sabados.push(`${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`); } fecha.setDate(fecha.getDate() + 7); }
     return sabados;
 }
+
+let fechaObjetivoActual = null; // Guardará el sábado de "hoy" para calcular el dashboard
 
 async function generarReporte() {
     const cont = document.getElementById('tabla-excel-container');
@@ -436,8 +392,10 @@ async function generarReporte() {
     
     let sabadoObjetivo = fechas[fechas.length - 1]; 
     for (let i = 0; i < fechas.length; i++) { if (fechas[i] >= hoyStr) { sabadoObjetivo = fechas[i]; break; } }
+    fechaObjetivoActual = sabadoObjetivo; // Guardamos para actualizar el DOM en tiempo real
 
     let gA = 0, gP = 0, gF = 0;
+    let dashTotalActivos = 0; // Conteo para el dashboard
 
     let html = `<table class="matrix-table" id="tabla-exportar"><thead><tr>
         <th class="col-fija fix-1">N°</th>
@@ -462,10 +420,9 @@ async function generarReporte() {
 
     docentes.forEach((doc, i) => {
         let a = 0, p = 0, f = 0;
-        const inact = doc.estado_activo === false ? "fila-inactiva" : "";
-        const badgeInactivo = doc.estado_activo === false ? `<span class="badge-inactivo">INACTIVO</span>` : "";
-        const nombreCompleto = `${doc.apellidos}, ${doc.nombres}`;
-        const pinMostrar = String(doc.pin).padStart(3, '0');
+        let rachaFaltas = 0; // Contador para las 3 faltas
+        
+        if (doc.estado_activo) dashTotalActivos++;
 
         let celdasFechas = "";
         fechas.forEach(fecha => {
@@ -483,10 +440,16 @@ async function generarReporte() {
                 else { val = 'pendiente'; cls = 's'; }
             }
 
+            // ALGORITMO: Calculando rachas de faltas hasta la fecha actual
+            if (fecha <= hoyStr && !isSuspendido) {
+                if (val === 'falta') rachaFaltas++;
+                else if (val === 'asistio' || val === 'permiso') rachaFaltas = 0; // Se resetea la racha
+            }
+
             if (isSuspendido) { celdasFechas += `<td class="${fecha === sabadoObjetivo ? 'celda-actual' : ''}"><span class="badge-suspendida">-</span></td>`; } 
             else {
                 celdasFechas += `<td class="${fecha === sabadoObjetivo ? 'celda-actual' : ''}">
-                    <select class="select-asistencia ${cls}" data-fecha="${fecha}" onchange="cambiarEstadoCelda(${doc.id}, '${nombreCompleto}', '${fecha}', this.value, this)" ${!doc.estado_activo ? 'disabled' : ''}>
+                    <select class="select-asistencia ${cls}" data-fecha="${fecha}" onchange="cambiarEstadoCelda(${doc.id}, '${doc.apellidos}, ${doc.nombres}', '${fecha}', this.value, this)" ${!doc.estado_activo ? 'disabled' : ''}>
                         <option value="pendiente" ${val === 'pendiente' ? 'selected' : ''}>-</option>
                         <option value="asistio" ${val === 'asistio' ? 'selected' : ''}>A</option>
                         <option value="permiso" ${val === 'permiso' ? 'selected' : ''}>P</option>
@@ -497,11 +460,24 @@ async function generarReporte() {
         });
 
         gA += a; gP += p; gF += f;
+        
+        // DISEÑO DE LA FILA (Inactivo o Alerta Roja)
+        let rowClasses = doc.estado_activo === false ? "fila-inactiva" : "";
+        let badgeInactivo = doc.estado_activo === false ? `<span class="badge-inactivo">INACTIVO</span>` : "";
+        let warningIcon = "";
+
+        if (rachaFaltas >= 3 && doc.estado_activo !== false) {
+            rowClasses += " alerta-faltas";
+            warningIcon = `<span class="icon-alerta" title="¡CUIDADO! ${rachaFaltas} faltas consecutivas acumuladas">⚠️</span>`;
+        }
+
+        const nombreCompleto = `${doc.apellidos}, ${doc.nombres}`;
+        const pinMostrar = String(doc.pin).padStart(3, '0');
         const btnEditar = `<button onclick="abrirModalEdicion(${doc.id}, '${doc.nombres}', '${doc.apellidos}', ${doc.estado_activo})" class="btn-manage" title="Ajustes">⚙️</button>`;
 
-        html += `<tr class="${inact}">
+        html += `<tr class="${rowClasses}">
             <td class="col-fija fix-1">${i + 1}</td>
-            <td class="col-fija fix-2" title="${nombreCompleto}"><div style="display: flex; justify-content: space-between; align-items: center; width: 100%;"><span style="overflow: hidden; text-overflow: ellipsis;">${nombreCompleto}</span>${badgeInactivo}</div></td>
+            <td class="col-fija fix-2" title="${nombreCompleto}"><div style="display: flex; justify-content: space-between; align-items: center; width: 100%;"><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${nombreCompleto}${warningIcon}</span>${badgeInactivo}</div></td>
             <td class="col-fija fix-3">${pinMostrar}</td>
             <td class="col-fija fix-4 val-a">${a}</td>
             <td class="col-fija fix-5 val-p">${p}</td>
@@ -522,7 +498,12 @@ async function generarReporte() {
         else html += `<td class="celda-totales" data-footer-fecha="${fecha}"></td>`; 
     });
     
-    html += `</tr></tfoot></table>`; cont.innerHTML = html; actualizarTotalesDOM();
+    html += `</tr></tfoot></table>`; cont.innerHTML = html; 
+    
+    // Asignar los totales de docentes al Dashboard
+    document.getElementById('dash-total').textContent = dashTotalActivos;
+    
+    actualizarTotalesDOM();
     setTimeout(() => { const col = document.querySelector('.col-actual'); if (col) col.scrollIntoView({ behavior: 'smooth', inline: 'center' }); }, 300);
 }
 
@@ -543,6 +524,8 @@ window.cambiarEstadoCelda = async function(id, nombreDocente, fecha, estado, sel
 
 function actualizarTotalesDOM() {
     let globalA = 0, globalP = 0, globalF = 0;
+    
+    // Actualizar columnas laterales de cada fila
     document.querySelectorAll('#tabla-exportar tbody tr').forEach(fila => {
         let a = 0, p = 0, f = 0;
         fila.querySelectorAll('.select-asistencia').forEach(sel => { if (sel.value === 'asistio') a++; else if (sel.value === 'permiso') p++; else if (sel.value === 'falta') f++; });
@@ -552,16 +535,35 @@ function actualizarTotalesDOM() {
         globalA += a; globalP += p; globalF += f;
     });
 
+    // Actualizar Pie de tabla por fecha y capturar el resumen de HOY para el Dashboard
+    let dashA = 0, dashP = 0, dashF = 0;
     const fechas = obtenerSabados();
+    
     fechas.forEach(fecha => {
         const selects = document.querySelectorAll(`.select-asistencia[data-fecha="${fecha}"]`);
         const cell = document.querySelector(`td[data-footer-fecha="${fecha}"]`);
         if (selects.length > 0 && cell) {
             let a = 0, p = 0, f = 0;
-            selects.forEach(sel => { if (sel.value === 'asistio') a++; else if (sel.value === 'permiso') p++; else if (sel.value === 'falta') f++; });
+            selects.forEach(sel => { 
+                // Evitar sumar los docentes inactivos al conteo del dashboard
+                if (!sel.hasAttribute('disabled')) {
+                    if (sel.value === 'asistio') a++; else if (sel.value === 'permiso') p++; else if (sel.value === 'falta') f++; 
+                }
+            });
             cell.innerHTML = `<div class="mini-card-totales"><span class="m-badge a">A: ${a}</span><span class="m-badge p">P: ${p}</span><span class="m-badge f">F: ${f}</span></div>`;
+            
+            // Si estamos evaluando la columna del sábado de hoy, guardamos los datos para el dashboard superior
+            if (fecha === fechaObjetivoActual) {
+                dashA = a; dashP = p; dashF = f;
+            }
         }
     });
+    
+    // Inyectar en Dashboard dinámicamente
+    document.getElementById('dash-presentes').textContent = dashA;
+    document.getElementById('dash-permisos').textContent = dashP;
+    document.getElementById('dash-ausentes').textContent = dashF;
+
     dibujarGrafica(globalA, globalP, globalF);
 }
 
@@ -649,3 +651,52 @@ document.getElementById('btn-exportar-csv').addEventListener('click', () => {
     const link = document.createElement("a"); link.href = url; link.setAttribute("download", "Matriz_Asistencias.xlsx");
     document.body.appendChild(link); link.click(); document.body.removeChild(link); window.URL.revokeObjectURL(url);
 });
+
+// =========================================================
+// 11. LÓGICA DE GOD MODE (CONTROL DE ACCESOS)
+// =========================================================
+document.getElementById('btn-recargar-godmode').addEventListener('click', cargarUsuariosGodMode);
+
+async function cargarUsuariosGodMode() {
+    const tbody = document.getElementById('tabla-godmode-body');
+    tbody.innerHTML = "<tr><td colspan='3' style='padding:20px; text-align:center;'>Cargando base de datos de usuarios...</td></tr>";
+    
+    const { data: usuarios, error } = await clienteSupabase.from('estado_usuarios').select('*').order('email', { ascending: true });
+    
+    if (error) { tbody.innerHTML = "<tr><td colspan='3' style='color:red;'>Error al conectar con la base de seguridad.</td></tr>"; return; }
+    if (!usuarios || usuarios.length === 0) { tbody.innerHTML = "<tr><td colspan='3'>No hay colaboradores registrados en el puente.</td></tr>"; return; }
+
+    let html = "";
+    usuarios.forEach(u => {
+        const isGod = u.email === CORREO_ADMIN_GOD;
+        const badge = u.estado_activo 
+            ? `<span style="background:#dcfce7; color:#15803d; padding:4px 8px; border-radius:4px; font-size:10px; font-weight:bold;">ACTIVO ✅</span>` 
+            : `<span style="background:#fee2e2; color:#b91c1c; padding:4px 8px; border-radius:4px; font-size:10px; font-weight:bold;">BLOQUEADO 🚫</span>`;
+        
+        let btnAccion = "";
+        if (isGod) {
+            btnAccion = `<span style="color:var(--slate-400); font-size:11px; font-weight:bold;">INTOCABLE 👑</span>`;
+        } else if (u.estado_activo) {
+            btnAccion = `<button onclick="cambiarEstadoUsuario('${u.email}', false)" class="btn-danger" style="padding:6px 10px; font-size:11px;">Suspender Acceso</button>`;
+        } else {
+            btnAccion = `<button onclick="cambiarEstadoUsuario('${u.email}', true)" class="btn-success" style="padding:6px 10px; font-size:11px;">Restaurar Acceso</button>`;
+        }
+
+        html += `<tr>
+            <td style="text-align: left; padding-left: 15px; font-weight: bold; color: var(--slate-800);">${u.email}</td>
+            <td style="text-align: center;">${badge}</td>
+            <td style="text-align: center;">${btnAccion}</td>
+        </tr>`;
+    });
+    tbody.innerHTML = html;
+}
+
+window.cambiarEstadoUsuario = async function(emailTarget, nuevoEstado) {
+    const tbody = document.getElementById('tabla-godmode-body');
+    tbody.innerHTML = "<tr><td colspan='3' style='padding:20px; text-align:center; color:#f59e0b;'>Actualizando seguridad...</td></tr>";
+    
+    await clienteSupabase.from('estado_usuarios').update({ estado_activo: nuevoEstado }).eq('email', emailTarget);
+    registrarLog(`${nuevoEstado ? 'Restauró' : 'Suspendió (Bloqueo)'} el acceso al sistema del correo: ${emailTarget}`);
+    
+    cargarUsuariosGodMode();
+};

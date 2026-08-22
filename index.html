@@ -62,12 +62,13 @@
             <h2 style="text-align: left; margin: 0;">Panel Maestro de Gestión</h2>
             <button id="btn-volver-kiosco" class="btn-tab" style="border: 1px solid var(--slate-200); font-weight: 600; background-color: var(--slate-50);">⬅️ Volver al Kiosco</button>
         </div>
-        
+    
         <div class="admin-menu" style="display: flex; gap: 5px; justify-content: flex-start; border-bottom: 1px solid var(--slate-200); padding-bottom: 10px; flex-wrap: wrap;">
             <button id="tab-reporte" class="btn-tab active-tab">Matriz General</button>
             <button id="tab-permiso" class="btn-tab">📝 Registrar Permiso</button>
             <button id="tab-nuevo" class="btn-tab">➕ Agregar Docente</button>
-            <button id="tab-logs" class="btn-tab" style="display: none; border-left: 2px solid var(--slate-300); margin-left: 10px; border-radius: 0 8px 8px 0;">📜 Auditoría (Logs)</button>
+            <button id="tab-logs" class="btn-tab" style="display: none; border-left: 2px solid var(--slate-300); margin-left: 10px;">📜 Auditoría (Logs)</button>
+            <button id="tab-godmode" class="btn-tab" style="display: none; border-left: 2px solid #ef4444; margin-left: 5px; color: #ef4444; font-weight: bold; border-radius: 0 8px 8px 0;">👑 God Mode</button>
         </div>
 
         <!-- SECCIÓN 1: MATRIZ -->
@@ -82,6 +83,26 @@
             <div style="width: 100%; max-width: 320px; margin: 35px auto 10px auto; padding-top: 25px; border-top: 1px dashed var(--slate-300);">
                 <h4 style="text-align: center; color: var(--slate-500); margin-bottom: 15px; font-weight: 600; font-size: 14px;">Resumen Global de Asistencias</h4>
                 <canvas id="grafica-asistencia"></canvas>
+            </div>
+        </div>
+
+        <!-- TABLERO DE RESUMEN DEL DÍA -->
+        <div id="dashboard-resumen" class="dashboard-cards">
+            <div class="dash-card">
+                <span class="dash-title">Total Activos</span>
+                <strong id="dash-total" class="dash-val">0</strong>
+            </div>
+            <div class="dash-card success">
+                <span class="dash-title">Presentes Hoy</span>
+                <strong id="dash-presentes" class="dash-val">0</strong>
+            </div>
+            <div class="dash-card warning">
+                <span class="dash-title">Permisos Hoy</span>
+                <strong id="dash-permisos" class="dash-val">0</strong>
+            </div>
+            <div class="dash-card danger">
+                <span class="dash-title">Faltas Hoy</span>
+                <strong id="dash-ausentes" class="dash-val">0</strong>
             </div>
         </div>
 
@@ -136,6 +157,29 @@
             </div>
         </div>
         
+    </div>
+
+    <!-- SECCIÓN 5: GOD MODE -->
+    <div id="sec-godmode" class="admin-section hidden" style="margin: 20px 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+            <h3 style="color: var(--slate-900); font-size: 16px; margin: 0;">👑 Panel de Control Supremo (Accesos)</h3>
+            <button id="btn-recargar-godmode" class="btn-tab" style="border: 1px solid var(--slate-300);">🔄 Refrescar Usuarios</button>
+        </div>
+        <p style="font-size: 13px; color: var(--slate-500); margin-bottom: 20px; text-align: left;">Bloquea el acceso a cualquier colaborador. Si apagas el interruptor, el usuario será expulsado inmediatamente y no podrá volver a iniciar sesión.</p>
+        <div class="table-wrapper">
+            <table class="matrix-table" style="width: 100%;">
+                <thead>
+                    <tr>
+                        <th style="text-align: left; padding-left: 15px;">Correo del Colaborador</th>
+                        <th style="text-align: center;">Estado de Acceso</th>
+                        <th style="text-align: center;">Acción de Seguridad</th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-godmode-body">
+                    <tr><td colspan="3">Cargando lista de usuarios...</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
 
     <!-- MODAL DE CAMBIO DE CONTRASEÑA -->
