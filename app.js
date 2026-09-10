@@ -45,7 +45,7 @@ function emitirSonido(tipo) {
         osc.type = 'sine';
         osc.frequency.setValueAtTime(784, ahora);
         ganancia.gain.setValueAtTime(0.001, ahora);
-        ganancia.gain.exponentialRampToValueAtTime(0.12, ahora + 0.02);
+        ganancia.gain.exponentialRampToValueAtTime(0.15, ahora + 0.02);
         ganancia.gain.exponentialRampToValueAtTime(0.001, ahora + 0.22);
         osc.start(ahora);
         osc.stop(ahora + 0.25);
@@ -53,7 +53,7 @@ function emitirSonido(tipo) {
         osc.type = 'sawtooth'; 
         osc.frequency.setValueAtTime(300, window.miAudioCtx.currentTime);
         osc.frequency.exponentialRampToValueAtTime(150, window.miAudioCtx.currentTime + 0.2);
-        ganancia.gain.setValueAtTime(0.7, window.miAudioCtx.currentTime); 
+        ganancia.gain.setValueAtTime(0.15, window.miAudioCtx.currentTime); 
         ganancia.gain.exponentialRampToValueAtTime(0.01, window.miAudioCtx.currentTime + 0.2);
         osc.start(); 
         osc.stop(window.miAudioCtx.currentTime + 0.2);
