@@ -702,7 +702,16 @@ async function exportarMatrizExcel() {
         wb.modified = new Date();
 
         const ws = wb.addWorksheet('Control de Asistencia', {
-            views: [{ state: 'frozen', xSplit: 3, ySplit: 5, showGridLines: true }],
+            views: [
+                { 
+                    state: 'frozen', 
+                    xSplit: 3, 
+                    ySplit: 5, 
+                    topLeftCell: 'D6', 
+                    activePane: 'bottomRight', 
+                    showGridLines: true 
+                }
+            ],
             properties: { defaultRowHeight: 20 }
         });
 
@@ -1131,6 +1140,18 @@ async function exportarMatrizExcel() {
         for (let c = 7; c <= totalCols; c++) {
             ws.getColumn(c).width = 11; // Sábados
         }
+
+        // Asegurar que el panel inmovilizado inicie exactamente en D6 (evita duplicación de encabezados al subir)
+        ws.views = [
+            { 
+                state: 'frozen', 
+                xSplit: 3, 
+                ySplit: 5, 
+                topLeftCell: 'D6', 
+                activePane: 'bottomRight', 
+                showGridLines: true 
+            }
+        ];
 
         // Descarga del archivo Excel
         const buffer = await wb.xlsx.writeBuffer();
