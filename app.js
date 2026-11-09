@@ -461,8 +461,16 @@ document.getElementById('btn-eliminar-docente').addEventListener('click', async 
 // =========================================================
 let miGrafico = null; 
 function obtenerSabados() {
-    const sabados = []; let fecha = new Date(2026, 6, 11); const fin = new Date(2026, 10, 30);
-    while (fecha <= fin) { if (fecha.getDay() === 6) { sabados.push(`${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`); } fecha.setDate(fecha.getDate() + 7); }
+    const sabados = [];
+    // Clases únicamente los sábados: desde el 11 de Julio hasta el 31 de Octubre de 2026
+    let fecha = new Date(2026, 6, 11);
+    const fin = new Date(2026, 9, 31, 23, 59, 59);
+    while (fecha <= fin) {
+        if (fecha.getDay() === 6) {
+            sabados.push(`${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`);
+        }
+        fecha.setDate(fecha.getDate() + 7);
+    }
     return sabados;
 }
 
@@ -645,32 +653,552 @@ function dibujarGrafica(a, p, f) {
     miGrafico = new Chart(ctx, { type: 'doughnut', data: { labels: ['Asistencias', 'Permisos', 'Faltas'], datasets: [{ data: [a, p, f], backgroundColor: ['#10b981', '#f59e0b', '#ef4444'] }] }, options: { plugins: { legend: { position: 'bottom' } } } });
 }
 
-document.getElementById('btn-exportar-csv').addEventListener('click', () => {
+// =========================================================
+// 10.1 EXPORTACIÓN A EXCEL CON ESTILOS PROFESIONALES (ExcelJS)
+// =========================================================
+function colToLetter(colIndex) {
+    let temp = '';
+    let letter = '';
+    while (colIndex > 0) {
+        temp = (colIndex - 1) % 26;
+        letter = String.fromCharCode(65 + temp) + letter;
+        colIndex = Math.floor((colIndex - temp - 1) / 26);
+    }
+    return letter;
+}
+
+const mesesEs = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+function formatFechaHeader(fechaStr) {
+    const partes = fechaStr.split('-');
+    const mesIndex = parseInt(partes[1], 10) - 1;
+    return `${partes[2]}-${mesesEs[mesIndex] || partes[1]}`;
+}
+
+async function exportarMatrizExcel() {
     const tabla = document.getElementById('tabla-exportar'); 
     if (!tabla) return alert("Por favor, espere a que la tabla cargue primero.");
-    registrarLog("Exportó la Matriz General a Excel");
+
+    const btn = document.getElementById('btn-exportar-csv');
+    const originalBtnHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.innerHTML = `<span style="display:inline-block; animation:palpitar 1s infinite;">⏳</span> Generando Excel...`;
+        btn.disabled = true;
+    }
+
+    try {
+        registrarLog("Exportó la Matriz General a Excel con formato estilizado");
+
+        // Si ExcelJS no estuviera disponible, usar SheetJS de respaldo
+        if (typeof ExcelJS === 'undefined') {
+            console.warn("ExcelJS no disponible, usando SheetJS de respaldo...");
+            exportarConSheetJSFallback(tabla);
+            return;
+        }
+
+        const wb = new ExcelJS.Workbook();
+        wb.creator = 'Sistema de Asistencia Docente';
+        wb.lastModifiedBy = emailUsuarioActual || 'Administrador';
+        wb.created = new Date();
+        wb.modified = new Date();
+
+        const ws = wb.addWorksheet('Control de Asistencia', {
+            views: [{ state: 'frozen', xSplit: 3, ySplit: 5, showGridLines: true }],
+            properties: { defaultRowHeight: 20 }
+        });
+
+        const fechas = obtenerSabados();
+        const totalCols = 6 + fechas.length; // N°, Docente, PIN, A, P, F + Sábados
+        const lastColLetter = colToLetter(totalCols);
+
+        // Paleta oficial coherente con la aplicación web
+        const PALETTE = {
+            navyDark: '0F172A',      // Slate 900
+            navyMedium: '1E293B',    // Slate 800
+            slateDark: '334155',     // Slate 700
+            slateMuted: '475569',    // Slate 600
+            slateLight: 'F1F5F9',    // Slate 100
+            headerBg: 'F8FAFC',      // Slate 50
+            borderLight: 'E2E8F0',   // Slate 200
+            borderDark: 'CBD5E1',    // Slate 300
+
+            // Estados
+            badgeABg: 'DCFCE7',      // Verde suave
+            badgeATxt: '15803D',     // Verde oscuro
+            summaryABg: 'F0FDF4',
+
+            badgePBg: 'FEF9C3',      // Amarillo/ámbar suave
+            badgePTxt: 'A16207',     // Ámbar oscuro
+            summaryPBg: 'FEFCE8',
+
+            badgeFBg: 'FEE2E2',      // Rojo suave
+            badgeFTxt: 'B91C1C',     // Rojo oscuro
+            summaryFBg: 'FEF2F2',
+
+            badgeSBg: 'F1F5F9',      // Gris suspendido/inactivo
+            badgeSTxt: '94A3B8',
+
+            inactiveTxt: '94A3B8'
+        };
+
+        const argb = (hex) => 'FF' + hex;
+
+        const borderThin = {
+            top: { style: 'thin', color: { argb: argb(PALETTE.borderLight) } },
+            left: { style: 'thin', color: { argb: argb(PALETTE.borderLight) } },
+            bottom: { style: 'thin', color: { argb: argb(PALETTE.borderLight) } },
+            right: { style: 'thin', color: { argb: argb(PALETTE.borderLight) } }
+        };
+
+        const borderHeaderBottom = {
+            top: { style: 'thin', color: { argb: argb(PALETTE.borderLight) } },
+            left: { style: 'thin', color: { argb: argb(PALETTE.borderLight) } },
+            bottom: { style: 'medium', color: { argb: argb(PALETTE.borderDark) } },
+            right: { style: 'thin', color: { argb: argb(PALETTE.borderLight) } }
+        };
+
+        // --- FILA 1: TÍTULO PRINCIPAL ---
+        ws.mergeCells(1, 1, 1, totalCols);
+        const r1 = ws.getCell('A1');
+        r1.value = 'SISTEMA DE CONTROL DE ASISTENCIA DOCENTE';
+        r1.font = { name: 'Segoe UI', size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+        r1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.navyDark) } };
+        r1.alignment = { vertical: 'middle', horizontal: 'center' };
+        ws.getRow(1).height = 32;
+
+        // --- FILA 2: SUBTÍTULO INSTITUCIONAL Y RANGO DE FECHAS ---
+        ws.mergeCells(2, 1, 2, totalCols);
+        const r2 = ws.getCell('A2');
+        r2.value = 'Período de Clases: Sábados del 11 de Julio al 31 de Octubre de 2026 | Acto de Graduación: 14 de Noviembre de 2026';
+        r2.font = { name: 'Segoe UI', size: 10, color: { argb: 'FFCBD5E1' } };
+        r2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.navyMedium) } };
+        r2.alignment = { vertical: 'middle', horizontal: 'center' };
+        ws.getRow(2).height = 20;
+
+        // --- FILA 3: LEYENDA DE CONVENCIONES ---
+        ws.mergeCells(3, 1, 3, totalCols);
+        const r3 = ws.getCell('A3');
+        r3.value = 'Leyenda:  [ A ] Asistencia  |  [ P ] Permiso  |  [ F ] Falta  |  [ - ] No Aplica / Suspendido';
+        r3.font = { name: 'Segoe UI', size: 9, bold: true, italic: true, color: { argb: argb(PALETTE.slateMuted) } };
+        r3.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.slateLight) } };
+        r3.alignment = { vertical: 'middle', horizontal: 'center' };
+        ws.getRow(3).height = 20;
+
+        // --- FILA 4: ENCABEZADOS DE GRUPO ---
+        ws.mergeCells(4, 1, 4, 3);
+        const g1 = ws.getCell('A4');
+        g1.value = 'INFORMACIÓN DEL DOCENTE';
+        g1.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+        g1.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.slateDark) } };
+        g1.alignment = { vertical: 'middle', horizontal: 'center' };
+
+        ws.mergeCells(4, 4, 4, 6);
+        const g2 = ws.getCell('D4');
+        g2.value = 'RESUMEN';
+        g2.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+        g2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.navyMedium) } };
+        g2.alignment = { vertical: 'middle', horizontal: 'center' };
+
+        ws.mergeCells(4, 7, 4, totalCols);
+        const g3 = ws.getCell('G4');
+        g3.value = 'CONTROL DE ASISTENCIAS POR SÁBADO (CLASES)';
+        g3.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+        g3.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.navyDark) } };
+        g3.alignment = { vertical: 'middle', horizontal: 'center' };
+        ws.getRow(4).height = 22;
+
+        // --- FILA 5: ENCABEZADOS DE COLUMNAS ---
+        const hCols = [
+            { col: 1, title: 'N°', align: 'center', bg: PALETTE.headerBg, fg: PALETTE.slateDark },
+            { col: 2, title: 'APELLIDOS Y NOMBRES', align: 'left', bg: PALETTE.headerBg, fg: PALETTE.slateDark },
+            { col: 3, title: 'CÓDIGO', align: 'center', bg: PALETTE.headerBg, fg: PALETTE.slateDark },
+            { col: 4, title: 'A', align: 'center', bg: PALETTE.badgeABg, fg: PALETTE.badgeATxt, bold: true },
+            { col: 5, title: 'P', align: 'center', bg: PALETTE.badgePBg, fg: PALETTE.badgePTxt, bold: true },
+            { col: 6, title: 'F', align: 'center', bg: PALETTE.badgeFBg, fg: PALETTE.badgeFTxt, bold: true }
+        ];
+
+        hCols.forEach(h => {
+            const cell = ws.getCell(5, h.col);
+            cell.value = h.title;
+            cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(h.fg) } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(h.bg) } };
+            cell.alignment = { vertical: 'middle', horizontal: h.align };
+            cell.border = borderHeaderBottom;
+        });
+
+        fechas.forEach((f, idx) => {
+            const colIndex = 7 + idx;
+            const cell = ws.getCell(5, colIndex);
+            cell.value = formatFechaHeader(f);
+            cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.navyDark) } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.headerBg) } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            cell.border = borderHeaderBottom;
+        });
+        ws.getRow(5).height = 26;
+
+        // --- FILAS DE DOCENTES (DATOS) ---
+        const filasDocentes = tabla.querySelectorAll('tbody tr');
+        let globalTotA = 0, globalTotP = 0, globalTotF = 0;
+        const totalesPorSabado = fechas.map(() => ({ a: 0, p: 0, f: 0 }));
+
+        filasDocentes.forEach((fila, i) => {
+            const rowNum = 6 + i;
+            const isInactive = fila.classList.contains('fila-inactiva') || !!fila.querySelector('.badge-inactivo');
+            
+            // Extraer nombre limpio
+            let nombreDocente = fila.querySelector('.fix-2 span')?.textContent?.replace('⚠️', '')?.trim() || '';
+            if (!nombreDocente) {
+                nombreDocente = fila.querySelector('.fix-2')?.innerText?.replace('INACTIVO', '')?.replace('⚠️', '')?.trim() || '';
+            }
+            if (isInactive) nombreDocente += ' (INACTIVO)';
+
+            // PIN
+            const pinDocente = fila.querySelector('.fix-3')?.textContent?.trim() || '';
+
+            // Totales de la fila
+            const valA = parseInt(fila.querySelector('.val-a')?.textContent || '0', 10);
+            const valP = parseInt(fila.querySelector('.val-p')?.textContent || '0', 10);
+            const valF = parseInt(fila.querySelector('.val-f')?.textContent || '0', 10);
+
+            globalTotA += valA;
+            globalTotP += valP;
+            globalTotF += valF;
+
+            // Col 1: N°
+            const cNum = ws.getCell(rowNum, 1);
+            cNum.value = i + 1;
+            cNum.font = { name: 'Segoe UI', size: 10, color: { argb: argb(PALETTE.slateMuted) } };
+            cNum.alignment = { vertical: 'middle', horizontal: 'center' };
+            cNum.border = borderThin;
+
+            // Col 2: Docente
+            const cNom = ws.getCell(rowNum, 2);
+            cNom.value = nombreDocente;
+            cNom.font = { 
+                name: 'Segoe UI', 
+                size: 10, 
+                bold: !isInactive, 
+                strike: isInactive, 
+                color: { argb: argb(isInactive ? PALETTE.inactiveTxt : PALETTE.navyDark) } 
+            };
+            cNom.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+            cNom.border = borderThin;
+
+            // Col 3: PIN (como texto para conservar ceros a la izquierda)
+            const cPin = ws.getCell(rowNum, 3);
+            cPin.value = pinDocente;
+            cPin.numFmt = '@';
+            cPin.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.slateMuted) } };
+            cPin.alignment = { vertical: 'middle', horizontal: 'center' };
+            cPin.border = borderThin;
+
+            // Col 4: Asistencias (A)
+            const cA = ws.getCell(rowNum, 4);
+            cA.value = { formula: `COUNTIF(G${rowNum}:${lastColLetter}${rowNum},"A")`, result: valA };
+            cA.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.badgeATxt) } };
+            cA.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.summaryABg) } };
+            cA.alignment = { vertical: 'middle', horizontal: 'center' };
+            cA.border = borderThin;
+
+            // Col 5: Permisos (P)
+            const cP = ws.getCell(rowNum, 5);
+            cP.value = { formula: `COUNTIF(G${rowNum}:${lastColLetter}${rowNum},"P")`, result: valP };
+            cP.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.badgePTxt) } };
+            cP.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.summaryPBg) } };
+            cP.alignment = { vertical: 'middle', horizontal: 'center' };
+            cP.border = borderThin;
+
+            // Col 6: Faltas (F)
+            const cF = ws.getCell(rowNum, 6);
+            cF.value = { formula: `COUNTIF(G${rowNum}:${lastColLetter}${rowNum},"F")`, result: valF };
+            cF.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.badgeFTxt) } };
+            cF.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.summaryFBg) } };
+            cF.alignment = { vertical: 'middle', horizontal: 'center' };
+            cF.border = borderThin;
+
+            // Columnas de fechas de sábados
+            fechas.forEach((fecha, idx) => {
+                const colIdx = 7 + idx;
+                const cDate = ws.getCell(rowNum, colIdx);
+                const sel = fila.querySelector(`.select-asistencia[data-fecha="${fecha}"]`);
+                
+                let valEstado = '-';
+                if (sel) {
+                    if (sel.value === 'asistio') valEstado = 'A';
+                    else if (sel.value === 'permiso') valEstado = 'P';
+                    else if (sel.value === 'falta') valEstado = 'F';
+                }
+
+                cDate.value = valEstado;
+                cDate.alignment = { vertical: 'middle', horizontal: 'center' };
+                cDate.border = borderThin;
+
+                if (valEstado === 'A') {
+                    cDate.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.badgeABg) } };
+                    cDate.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: argb(PALETTE.badgeATxt) } };
+                    totalesPorSabado[idx].a++;
+                } else if (valEstado === 'P') {
+                    cDate.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.badgePBg) } };
+                    cDate.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: argb(PALETTE.badgePTxt) } };
+                    totalesPorSabado[idx].p++;
+                } else if (valEstado === 'F') {
+                    cDate.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.badgeFBg) } };
+                    cDate.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: argb(PALETTE.badgeFTxt) } };
+                    totalesPorSabado[idx].f++;
+                } else {
+                    cDate.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.badgeSBg) } };
+                    cDate.font = { name: 'Segoe UI', size: 10, color: { argb: argb(PALETTE.badgeSTxt) } };
+                }
+            });
+
+            ws.getRow(rowNum).height = 20;
+        });
+
+        // --- FILAS DE TOTALES / RESUMEN INFERIOR ---
+        const endDocRow = 5 + filasDocentes.length;
+        const rSpacer = endDocRow + 1;
+        ws.getRow(rSpacer).height = 8; // Espacio visual
+
+        const rA = endDocRow + 2;
+        const rP = endDocRow + 3;
+        const rF = endDocRow + 4;
+        const rPct = endDocRow + 5;
+
+        // Fila Total Asistencias (A)
+        ws.mergeCells(rA, 1, rA, 3);
+        const lA = ws.getCell(rA, 1);
+        lA.value = 'TOTAL ASISTENCIAS (A)';
+        lA.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.badgeATxt) } };
+        lA.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.badgeABg) } };
+        lA.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
+        lA.border = borderThin;
+
+        const totACol = ws.getCell(rA, 4);
+        totACol.value = { formula: `SUM(D6:D${endDocRow})`, result: globalTotA };
+        totACol.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: argb(PALETTE.badgeATxt) } };
+        totACol.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.badgeABg) } };
+        totACol.alignment = { vertical: 'middle', horizontal: 'center' };
+        totACol.border = borderThin;
+
+        [5, 6].forEach(c => {
+            const cell = ws.getCell(rA, c);
+            cell.value = '-';
+            cell.font = { name: 'Segoe UI', size: 10, color: { argb: argb(PALETTE.slateMuted) } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.headerBg) } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            cell.border = borderThin;
+        });
+
+        fechas.forEach((f, idx) => {
+            const colIdx = 7 + idx;
+            const colLetter = colToLetter(colIdx);
+            const cell = ws.getCell(rA, colIdx);
+            cell.value = { formula: `COUNTIF(${colLetter}6:${colLetter}${endDocRow},"A")`, result: totalesPorSabado[idx].a };
+            cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.badgeATxt) } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.badgeABg) } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            cell.border = borderThin;
+        });
+        ws.getRow(rA).height = 22;
+
+        // Fila Total Permisos (P)
+        ws.mergeCells(rP, 1, rP, 3);
+        const lP = ws.getCell(rP, 1);
+        lP.value = 'TOTAL PERMISOS (P)';
+        lP.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.badgePTxt) } };
+        lP.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.badgePBg) } };
+        lP.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
+        lP.border = borderThin;
+
+        [4, 6].forEach(c => {
+            const cell = ws.getCell(rP, c);
+            cell.value = '-';
+            cell.font = { name: 'Segoe UI', size: 10, color: { argb: argb(PALETTE.slateMuted) } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.headerBg) } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            cell.border = borderThin;
+        });
+
+        const totPCol = ws.getCell(rP, 5);
+        totPCol.value = { formula: `SUM(E6:E${endDocRow})`, result: globalTotP };
+        totPCol.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: argb(PALETTE.badgePTxt) } };
+        totPCol.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.badgePBg) } };
+        totPCol.alignment = { vertical: 'middle', horizontal: 'center' };
+        totPCol.border = borderThin;
+
+        fechas.forEach((f, idx) => {
+            const colIdx = 7 + idx;
+            const colLetter = colToLetter(colIdx);
+            const cell = ws.getCell(rP, colIdx);
+            cell.value = { formula: `COUNTIF(${colLetter}6:${colLetter}${endDocRow},"P")`, result: totalesPorSabado[idx].p };
+            cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.badgePTxt) } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.badgePBg) } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            cell.border = borderThin;
+        });
+        ws.getRow(rP).height = 22;
+
+        // Fila Total Faltas (F)
+        ws.mergeCells(rF, 1, rF, 3);
+        const lF = ws.getCell(rF, 1);
+        lF.value = 'TOTAL FALTAS (F)';
+        lF.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.badgeFTxt) } };
+        lF.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.badgeFBg) } };
+        lF.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
+        lF.border = borderThin;
+
+        [4, 5].forEach(c => {
+            const cell = ws.getCell(rF, c);
+            cell.value = '-';
+            cell.font = { name: 'Segoe UI', size: 10, color: { argb: argb(PALETTE.slateMuted) } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.headerBg) } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            cell.border = borderThin;
+        });
+
+        const totFCol = ws.getCell(rF, 6);
+        totFCol.value = { formula: `SUM(F6:F${endDocRow})`, result: globalTotF };
+        totFCol.font = { name: 'Segoe UI', size: 11, bold: true, color: { argb: argb(PALETTE.badgeFTxt) } };
+        totFCol.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.badgeFBg) } };
+        totFCol.alignment = { vertical: 'middle', horizontal: 'center' };
+        totFCol.border = borderThin;
+
+        fechas.forEach((f, idx) => {
+            const colIdx = 7 + idx;
+            const colLetter = colToLetter(colIdx);
+            const cell = ws.getCell(rF, colIdx);
+            cell.value = { formula: `COUNTIF(${colLetter}6:${colLetter}${endDocRow},"F")`, result: totalesPorSabado[idx].f };
+            cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.badgeFTxt) } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.badgeFBg) } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            cell.border = borderThin;
+        });
+        ws.getRow(rF).height = 22;
+
+        // Fila Porcentaje Efectivo de Asistencia (%)
+        ws.mergeCells(rPct, 1, rPct, 3);
+        const lPct = ws.getCell(rPct, 1);
+        lPct.value = 'PORCENTAJE DE ASISTENCIA (%)';
+        lPct.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.navyDark) } };
+        lPct.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.borderLight) } };
+        lPct.alignment = { vertical: 'middle', horizontal: 'right', indent: 1 };
+        lPct.border = borderThin;
+
+        const sumGlobal = globalTotA + globalTotP + globalTotF;
+        const pctGlobal = sumGlobal > 0 ? (globalTotA / sumGlobal) : 0;
+        const totPctCol = ws.getCell(rPct, 4);
+        totPctCol.value = { formula: `IF((D${rA}+E${rP}+F${rF})>0, D${rA}/(D${rA}+E${rP}+F${rF}), 0)`, result: pctGlobal };
+        totPctCol.numFmt = '0.0%';
+        totPctCol.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.navyDark) } };
+        totPctCol.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.borderLight) } };
+        totPctCol.alignment = { vertical: 'middle', horizontal: 'center' };
+        totPctCol.border = borderThin;
+
+        [5, 6].forEach(c => {
+            const cell = ws.getCell(rPct, c);
+            cell.value = '-';
+            cell.font = { name: 'Segoe UI', size: 10, color: { argb: argb(PALETTE.slateMuted) } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.borderLight) } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            cell.border = borderThin;
+        });
+
+        fechas.forEach((f, idx) => {
+            const colIdx = 7 + idx;
+            const colLetter = colToLetter(colIdx);
+            const sumDia = totalesPorSabado[idx].a + totalesPorSabado[idx].p + totalesPorSabado[idx].f;
+            const pctDia = sumDia > 0 ? (totalesPorSabado[idx].a / sumDia) : 0;
+            const cell = ws.getCell(rPct, colIdx);
+            cell.value = { 
+                formula: `IF((${colLetter}${rA}+${colLetter}${rP}+${colLetter}${rF})>0, ${colLetter}${rA}/(${colLetter}${rA}+${colLetter}${rP}+${colLetter}${rF}), 0)`, 
+                result: pctDia 
+            };
+            cell.numFmt = '0.0%';
+            cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.navyDark) } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.borderLight) } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center' };
+            cell.border = borderThin;
+        });
+        ws.getRow(rPct).height = 22;
+
+        // Configuración de anchos de columna
+        ws.getColumn(1).width = 6;   // N°
+        ws.getColumn(2).width = 38;  // DOCENTE
+        ws.getColumn(3).width = 11;  // CÓDIGO
+        ws.getColumn(4).width = 8;   // A
+        ws.getColumn(5).width = 8;   // P
+        ws.getColumn(6).width = 8;   // F
+        for (let c = 7; c <= totalCols; c++) {
+            ws.getColumn(c).width = 11; // Sábados
+        }
+
+        // Descarga del archivo Excel
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.setAttribute("download", "Control_Asistencia_Docentes_Sabados_2026.xlsx");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+
+    } catch (err) {
+        console.error("Error al exportar a Excel:", err);
+        alert("Ocurrió un error al generar el archivo Excel: " + err.message);
+    } finally {
+        if (btn) {
+            btn.innerHTML = originalBtnHtml;
+            btn.disabled = false;
+        }
+    }
+}
+
+// Función de respaldo en caso de que ExcelJS no cargue
+function exportarConSheetJSFallback(tabla) {
     let dataMatriz = [];
     tabla.querySelectorAll("thead tr, tbody tr").forEach(fila => {
         let arrayFila = [];
         fila.querySelectorAll("td, th").forEach((c, i) => {
             if (i === 6) return; 
-            if (fila.closest('thead')) { arrayFila.push(c.innerText.replace(/🚫 Susp\./g, '').replace(/✅ React\./g, '').replace(/\n/g, ' ').trim()); return; }
-            const sel = c.querySelector('select'); const badgeSuspendida = c.querySelector('.badge-suspendida');
+            if (fila.closest('thead')) { 
+                arrayFila.push(c.innerText.replace(/🚫 Susp\./g, '').replace(/✅ React\./g, '').replace(/\n/g, ' ').trim()); 
+                return; 
+            }
+            const sel = c.querySelector('select'); 
+            const badgeSuspendida = c.querySelector('.badge-suspendida');
             let valorCelda = '';
-            if (sel) { valorCelda = sel.value === 'asistio' ? 'A' : (sel.value === 'permiso' ? 'P' : (sel.value === 'falta' ? 'F' : '-')); } 
-            else if (badgeSuspendida) { valorCelda = '-'; } else { valorCelda = c.innerText.replace(/\n/g, '').trim(); }
+            if (sel) { 
+                valorCelda = sel.value === 'asistio' ? 'A' : (sel.value === 'permiso' ? 'P' : (sel.value === 'falta' ? 'F' : '-')); 
+            } else if (badgeSuspendida) { 
+                valorCelda = '-'; 
+            } else { 
+                valorCelda = c.innerText.replace(/\n/g, '').trim(); 
+            }
             if (i === 1) valorCelda = valorCelda.replace("INACTIVO", "").trim();
             arrayFila.push(valorCelda);
         });
         dataMatriz.push(arrayFila);
     });
-    const ws = XLSX.utils.aoa_to_sheet(dataMatriz); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Reporte");
-    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a"); link.href = url; link.setAttribute("download", "Matriz_Asistencias.xlsx");
-    document.body.appendChild(link); link.click(); document.body.removeChild(link); window.URL.revokeObjectURL(url);
-});
+    if (typeof XLSX !== 'undefined') {
+        const ws = XLSX.utils.aoa_to_sheet(dataMatriz); 
+        const wb = XLSX.utils.book_new(); 
+        XLSX.utils.book_append_sheet(wb, ws, "Reporte");
+        const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a"); 
+        link.href = url; 
+        link.setAttribute("download", "Matriz_Asistencias.xlsx");
+        document.body.appendChild(link); 
+        link.click(); 
+        document.body.removeChild(link); 
+        window.URL.revokeObjectURL(url);
+    }
+}
+
+document.getElementById('btn-exportar-csv').addEventListener('click', exportarMatrizExcel);
 
 // =========================================================
 // 11. GOD MODE (CONTROL DE ACCESOS)
