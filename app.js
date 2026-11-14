@@ -35,13 +35,12 @@ function emitirSonido(tipo) {
     }
     if (window.miAudioCtx.state === 'suspended') window.miAudioCtx.resume();
     
-    const osc = window.miAudioCtx.createOscillator();
-    const ganancia = window.miAudioCtx.createGain();
-    osc.connect(ganancia); 
-    ganancia.connect(window.miAudioCtx.destination);
-    
     const ahora = window.miAudioCtx.currentTime;
     if (tipo === 'exito') {
+        const osc = window.miAudioCtx.createOscillator();
+        const ganancia = window.miAudioCtx.createGain();
+        osc.connect(ganancia); 
+        ganancia.connect(window.miAudioCtx.destination);
         osc.type = 'sine';
         osc.frequency.setValueAtTime(784, ahora);
         ganancia.gain.setValueAtTime(0.001, ahora);
@@ -49,7 +48,27 @@ function emitirSonido(tipo) {
         ganancia.gain.exponentialRampToValueAtTime(0.001, ahora + 0.22);
         osc.start(ahora);
         osc.stop(ahora + 0.25);
+    } else if (tipo === 'graduacion') {
+        // Fanfarria alegre ascendente: Do5 -> Mi5 -> Sol5 -> Do6
+        const notas = [523.25, 659.25, 783.99, 1046.50];
+        notas.forEach((freq, idx) => {
+            const o = window.miAudioCtx.createOscillator();
+            const g = window.miAudioCtx.createGain();
+            o.type = 'triangle';
+            o.frequency.setValueAtTime(freq, ahora + idx * 0.07);
+            g.connect(window.miAudioCtx.destination);
+            o.connect(g);
+            g.gain.setValueAtTime(0.001, ahora + idx * 0.07);
+            g.gain.exponentialRampToValueAtTime(0.18, ahora + idx * 0.07 + 0.02);
+            g.gain.exponentialRampToValueAtTime(0.001, ahora + idx * 0.07 + 0.22);
+            o.start(ahora + idx * 0.07);
+            o.stop(ahora + idx * 0.07 + 0.25);
+        });
     } else if (tipo === 'error') {
+        const osc = window.miAudioCtx.createOscillator();
+        const ganancia = window.miAudioCtx.createGain();
+        osc.connect(ganancia); 
+        ganancia.connect(window.miAudioCtx.destination);
         osc.type = 'sawtooth'; 
         osc.frequency.setValueAtTime(300, window.miAudioCtx.currentTime);
         osc.frequency.exponentialRampToValueAtTime(150, window.miAudioCtx.currentTime + 0.2);
@@ -59,6 +78,134 @@ function emitirSonido(tipo) {
         osc.stop(window.miAudioCtx.currentTime + 0.2);
     }
 }
+
+// =========================================================
+// 3.1 ANIMACIÓN FESTIVA DE SERPENTINAS Y CONFETI (GRADUACIÓN)
+// =========================================================
+function lanzarSerpentinas() {
+    const canvasViejo = document.getElementById('canvas-serpentina');
+    if (canvasViejo) canvasViejo.remove();
+
+    const canvas = document.createElement('canvas');
+    canvas.id = 'canvas-serpentina';
+    canvas.style.position = 'fixed';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
+    canvas.style.width = '100vw';
+    canvas.style.height = '100vh';
+    canvas.style.pointerEvents = 'none';
+    canvas.style.zIndex = '99999';
+    document.body.appendChild(canvas);
+
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width = window.innerWidth;
+    const height = canvas.height = window.innerHeight;
+
+    const colores = ['#f59e0b', '#10b981', '#3b82f6', '#ec4899', '#8b5cf6', '#ef4444', '#facc15', '#06b6d4'];
+    const particulas = [];
+    const NUM_CONFETI = 60;
+    const NUM_SERPENTINAS = 28;
+
+    for (let i = 0; i < NUM_CONFETI; i++) {
+        const origenIzq = Math.random() < 0.5;
+        particulas.push({
+            tipo: 'confeti',
+            x: origenIzq ? width * 0.15 + (Math.random() * 60) : width * 0.85 - (Math.random() * 60),
+            y: height * 0.9,
+            vx: origenIzq ? (Math.random() * 8 + 4) : -(Math.random() * 8 + 4),
+            vy: -(Math.random() * 14 + 10),
+            size: Math.random() * 8 + 6,
+            color: colores[Math.floor(Math.random() * colores.length)],
+            rotation: Math.random() * 360,
+            rotationSpeed: (Math.random() - 0.5) * 12,
+            oscillation: Math.random() * 2 * Math.PI,
+            oscillationSpeed: Math.random() * 0.12 + 0.06,
+            opacity: 1
+        });
+    }
+
+    for (let i = 0; i < NUM_SERPENTINAS; i++) {
+        const origenIzq = Math.random() < 0.5;
+        particulas.push({
+            tipo: 'serpentina',
+            x: origenIzq ? width * 0.15 : width * 0.85,
+            y: height * 0.9,
+            vx: origenIzq ? (Math.random() * 7 + 3) : -(Math.random() * 7 + 3),
+            vy: -(Math.random() * 15 + 11),
+            ancho: Math.random() * 3 + 3,
+            color: colores[Math.floor(Math.random() * colores.length)],
+            wave: Math.random() * 10,
+            waveSpeed: Math.random() * 0.14 + 0.08,
+            puntos: [],
+            opacity: 1
+        });
+    }
+
+    const inicio = performance.now();
+    const duracionMs = 2800; // 2.8 segundos (animación ligera y ágil)
+    let animId = null;
+
+    function animar(ahoraT) {
+        const transcurrido = ahoraT - inicio;
+        if (transcurrido > duracionMs) {
+            cancelAnimationFrame(animId);
+            canvas.remove();
+            return;
+        }
+
+        const progreso = transcurrido / duracionMs;
+        const fade = progreso > 0.65 ? (1 - progreso) / 0.35 : 1;
+
+        ctx.clearRect(0, 0, width, height);
+
+        particulas.forEach(p => {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vy += 0.42; // Gravedad suave
+            p.vx *= 0.985; // Fricción suave del aire
+
+            ctx.globalAlpha = Math.max(0, fade * p.opacity);
+
+            if (p.tipo === 'confeti') {
+                p.rotation += p.rotationSpeed;
+                p.oscillation += p.oscillationSpeed;
+                const scaleX = Math.cos(p.oscillation);
+
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate((p.rotation * Math.PI) / 180);
+                ctx.scale(scaleX, 1);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.7);
+                ctx.restore();
+            } else if (p.tipo === 'serpentina') {
+                p.wave += p.waveSpeed;
+                p.puntos.push({ x: p.x, y: p.y });
+                if (p.puntos.length > 9) p.puntos.shift();
+
+                if (p.puntos.length > 1) {
+                    ctx.save();
+                    ctx.strokeStyle = p.color;
+                    ctx.lineWidth = p.ancho;
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(p.puntos[0].x, p.puntos[0].y);
+                    for (let j = 1; j < p.puntos.length; j++) {
+                        const waveOffsetX = Math.sin(p.wave + j) * 8;
+                        ctx.lineTo(p.puntos[j].x + waveOffsetX, p.puntos[j].y);
+                    }
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+        });
+
+        animId = requestAnimationFrame(animar);
+    }
+
+    animId = requestAnimationFrame(animar);
+}
+window.lanzarSerpentinas = lanzarSerpentinas;
 
 // =========================================================
 // 4. SEGURIDAD Y CONTROL DE SESIÓN (GOD MODE)
@@ -270,7 +417,7 @@ async function verificarPIN() {
     if (ahora.getHours() < 6 || ahora.getHours() >= 13) { emitirSonido('error'); mostrarAlerta(statusMsg, "Horario finalizado (6 AM - 1 PM).", "#ef4444", "white"); pinInput.value = ""; pinInput.focus(); return; }
 
     const { data: diaSusp } = await clienteSupabase.from('dias_suspendidos').select('fecha').eq('fecha', fechaLocal);
-    if (diaSusp && diaSusp.length > 0) { emitirSonido('error'); mostrarAlerta(statusMsg, "Clases suspendidas.", "#f59e0b", "white"); pinInput.value = ""; pinInput.focus(); return; }
+    if ((diaSusp && diaSusp.length > 0) || fechaLocal === '2026-11-07') { emitirSonido('error'); mostrarAlerta(statusMsg, "Clases suspendidas (Asueto).", "#f59e0b", "white"); pinInput.value = ""; pinInput.focus(); return; }
 
     const { data: docente, error } = await clienteSupabase.from('docentes').select('id, nombres, apellidos, estado_activo').eq('pin', parseInt(pin, 10)).single();
     if (error || !docente) { emitirSonido('error'); mostrarAlerta(statusMsg, "Código no encontrado.", "#ef4444", "white"); pinInput.value = ""; pinInput.focus(); return; }
@@ -287,6 +434,8 @@ document.getElementById('btn-si').addEventListener('click', async () => {
     const fechaLocal = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
     const horaAmigable = ahora.toLocaleTimeString('es-SV', { hour: '2-digit', minute: '2-digit', hour12: true });
 
+    const esGraduacion = fechaLocal === '2026-11-14';
+
     const { error } = await clienteSupabase.from('asistencias').insert([{ docente_id: docentePendiente.id, estado: 'asistio', fecha: fechaLocal, hora: ahora.toTimeString().split(' ')[0] }]);
 
     if (error) {
@@ -295,13 +444,30 @@ document.getElementById('btn-si').addEventListener('click', async () => {
         else mostrarAlerta(statusMsg, "Error de servidor.", "#ef4444", "white");
         resetearKioscoUI();
     } else {
-        emitirSonido('exito'); 
+        if (esGraduacion) {
+            emitirSonido('graduacion');
+            lanzarSerpentinas();
+        } else {
+            emitirSonido('exito');
+        }
+
         bloqueConfirmacion.classList.add('hidden');
-        document.getElementById('exito-nombre').textContent = `${docentePendiente.nombres}`;
-        document.getElementById('exito-hora').textContent = `Entrada: ${horaAmigable}`;
+        const elNombre = document.getElementById('exito-nombre');
+        const elHora = document.getElementById('exito-hora');
+        
+        if (esGraduacion) {
+            elNombre.innerHTML = `🎓 ¡Felicidades! ${docentePendiente.nombres} 🎓<br><span style="font-size:14px; font-weight:normal; opacity:0.95;">Asistencia de Graduación Registrada</span>`;
+        } else {
+            elNombre.textContent = `${docentePendiente.nombres}`;
+        }
+        elHora.textContent = `Entrada: ${horaAmigable}`;
+
         document.getElementById('tarjeta-exito').classList.remove('hidden');
-        registrarLog(`Validó PIN y marcó ASISTENCIA: ${docentePendiente.nombres} ${docentePendiente.apellidos}`);
-        setTimeout(() => { document.getElementById('tarjeta-exito').classList.add('hidden'); resetearKioscoUI(); }, 3500);
+        registrarLog(`Validó PIN y marcó ASISTENCIA ${esGraduacion ? '(GRADUACIÓN)' : ''}: ${docentePendiente.nombres} ${docentePendiente.apellidos}`);
+        setTimeout(() => { 
+            document.getElementById('tarjeta-exito').classList.add('hidden'); 
+            resetearKioscoUI(); 
+        }, esGraduacion ? 2800 : 3500);
     }
 });
 
@@ -365,9 +531,11 @@ function llenarFechasPermiso() {
     let html = "";
     fechas.forEach(f => {
         const d = f.split('-'); const dateObj = new Date(d[0], d[1] - 1, d[2]);
-        const text = dateObj.toLocaleDateString('es-SV', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        const textCapitalized = text.charAt(0).toUpperCase() + text.slice(1);
-        html += `<option value="${f}" ${f === sabadoObjetivo ? 'selected' : ''}>${textCapitalized}</option>`;
+        let text = dateObj.toLocaleDateString('es-SV', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        text = text.charAt(0).toUpperCase() + text.slice(1);
+        if (f === '2026-11-07') text += ' (Asueto / Libre)';
+        else if (f === '2026-11-14') text += ' (🎓 Graduación / Clausura)';
+        html += `<option value="${f}" ${f === sabadoObjetivo ? 'selected' : ''}>${text}</option>`;
     });
     selectFecha.innerHTML = html;
 }
@@ -462,9 +630,9 @@ document.getElementById('btn-eliminar-docente').addEventListener('click', async 
 let miGrafico = null; 
 function obtenerSabados() {
     const sabados = [];
-    // Clases únicamente los sábados: desde el 11 de Julio hasta el 31 de Octubre de 2026
+    // Clases los sábados desde el 11 de Julio al 31 de Octubre, Asueto 7 de Noviembre y Graduación el 14 de Noviembre de 2026
     let fecha = new Date(2026, 6, 11);
-    const fin = new Date(2026, 9, 31, 23, 59, 59);
+    const fin = new Date(2026, 10, 14, 23, 59, 59);
     while (fecha <= fin) {
         if (fecha.getDay() === 6) {
             sabados.push(`${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`);
@@ -479,12 +647,17 @@ async function generarReporte() {
     if(!cont) return;
     cont.innerHTML = "<p style='padding: 20px; font-weight: 600; color: var(--slate-500);'>Cargando registros...</p>";
 
-    const { data: docentes } = await clienteSupabase.from('docentes').select('*').order('apellidos', { ascending: true });
+    const { data: docentes } = await clienteSupabase.from('docentes').select('*').order('nombres', { ascending: true });
     const { data: asistencias } = await clienteSupabase.from('asistencias').select('*');
     const { data: diasSusp } = await clienteSupabase.from('dias_suspendidos').select('fecha');
     if (!docentes) { cont.innerHTML = "<p style='color:red;'>Error.</p>"; return; }
 
     const arrayDiasSuspendidos = diasSusp ? diasSusp.map(d => d.fecha) : [];
+    // Sábado 7 de Noviembre: Asueto (Día Libre) automático para que no cuente falta a nadie
+    if (!arrayDiasSuspendidos.includes('2026-11-07')) {
+        arrayDiasSuspendidos.push('2026-11-07');
+    }
+
     const fechas = obtenerSabados();
     const ahoraLocal = new Date();
     const hoyStr = `${ahoraLocal.getFullYear()}-${String(ahoraLocal.getMonth() + 1).padStart(2, '0')}-${String(ahoraLocal.getDate()).padStart(2, '0')}`;
@@ -500,8 +673,16 @@ async function generarReporte() {
     fechas.forEach(f => {
         const d = f.split('-'); const dateObj = new Date(d[0], d[1]-1, d[2]);
         const mes = dateObj.toLocaleString('es-ES', {month: 'short'}).substring(0,3).toUpperCase();
+        let badgeHeader = '';
+        let thClase = f === sabadoObjetivo ? 'col-actual' : '';
+        if (f === '2026-11-07') {
+            badgeHeader = `<span class="badge-asueto" title="Asueto / Día Libre">ASUETO</span>`;
+        } else if (f === '2026-11-14') {
+            badgeHeader = `<span class="badge-graduacion" title="Acto de Graduación / Clausura">🎓 GRAD.</span>`;
+            thClase += ' col-graduacion';
+        }
         const btnToggle = arrayDiasSuspendidos.includes(f) ? `<button onclick="toggleDiaSuspendido('${f}', true)" class="btn-reactivar" title="Reactivar">✅ React.</button>` : `<button onclick="toggleDiaSuspendido('${f}', false)" class="btn-suspender" title="Suspender">🚫 Susp.</button>`;
-        html += `<th class="${f === sabadoObjetivo ? 'col-actual' : ''}"><div class="date-header"><span class="mes">${mes}</span><span class="dia">${d[2]}</span></div>${btnToggle}</th>`;
+        html += `<th class="${thClase}"><div class="date-header">${badgeHeader}<span class="mes">${mes}</span><span class="dia">${d[2]}</span></div>${btnToggle}</th>`;
     });
     html += `</tr></thead><tbody>`;
 
@@ -529,8 +710,12 @@ async function generarReporte() {
                 else if (val === 'asistio' || val === 'permiso') rachaFaltas = 0; 
             }
 
-            if (isSuspendido) celdasFechas += `<td class="${fecha === sabadoObjetivo ? 'celda-actual' : ''}"><span class="badge-suspendida">-</span></td>`; 
-            else celdasFechas += `<td class="${fecha === sabadoObjetivo ? 'celda-actual' : ''}"><select class="select-asistencia ${cls}" data-fecha="${fecha}" onchange="cambiarEstadoCelda(${doc.id}, '${doc.apellidos}, ${doc.nombres}', '${fecha}', this.value, this)" ${!doc.estado_activo ? 'disabled' : ''}><option value="pendiente" ${val === 'pendiente' ? 'selected' : ''}>-</option><option value="asistio" ${val === 'asistio' ? 'selected' : ''}>A</option><option value="permiso" ${val === 'permiso' ? 'selected' : ''}>P</option><option value="falta" ${val === 'falta' ? 'selected' : ''}>F</option></select></td>`;
+            if (isSuspendido) {
+                const titleBadge = fecha === '2026-11-07' ? 'Asueto (Día Libre)' : 'Suspendido';
+                celdasFechas += `<td class="${fecha === sabadoObjetivo ? 'celda-actual' : ''}"><span class="badge-suspendida" title="${titleBadge}">-</span></td>`; 
+            } else {
+                celdasFechas += `<td class="${fecha === sabadoObjetivo ? 'celda-actual' : ''}"><select class="select-asistencia ${cls}" data-fecha="${fecha}" onchange="cambiarEstadoCelda(${doc.id}, '${doc.nombres} ${doc.apellidos}', '${fecha}', this.value, this)" ${!doc.estado_activo ? 'disabled' : ''}><option value="pendiente" ${val === 'pendiente' ? 'selected' : ''}>-</option><option value="asistio" ${val === 'asistio' ? 'selected' : ''}>A</option><option value="permiso" ${val === 'permiso' ? 'selected' : ''}>P</option><option value="falta" ${val === 'falta' ? 'selected' : ''}>F</option></select></td>`;
+            }
         });
 
         gA += a; gP += p; gF += f;
@@ -539,7 +724,7 @@ async function generarReporte() {
         let warningIcon = "";
         if (rachaFaltas >= 3 && doc.estado_activo !== false) { rowClasses += " alerta-faltas"; warningIcon = `<span class="icon-alerta" title="${rachaFaltas} faltas consecutivas">⚠️</span>`; }
 
-        const nombreCompleto = `${doc.apellidos}, ${doc.nombres}`;
+        const nombreCompleto = `${doc.nombres} ${doc.apellidos}`;
         html += `<tr class="${rowClasses}">
             <td class="col-fija fix-1">${i + 1}</td>
             <td class="col-fija fix-2" title="${nombreCompleto}"><div style="display: flex; justify-content: space-between; align-items: center; width: 100%;"><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${nombreCompleto}${warningIcon}</span>${badgeInactivo}</div></td>
@@ -671,6 +856,8 @@ const mesesEs = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 
 function formatFechaHeader(fechaStr) {
     const partes = fechaStr.split('-');
     const mesIndex = parseInt(partes[1], 10) - 1;
+    if (fechaStr === '2026-11-07') return '07-NOV (ASUETO)';
+    if (fechaStr === '2026-11-14') return '14-NOV (GRADUACIÓN)';
     return `${partes[2]}-${mesesEs[mesIndex] || partes[1]}`;
 }
 
@@ -777,7 +964,7 @@ async function exportarMatrizExcel() {
         // --- FILA 2: SUBTÍTULO INSTITUCIONAL Y RANGO DE FECHAS ---
         ws.mergeCells(2, 1, 2, totalCols);
         const r2 = ws.getCell('A2');
-        r2.value = 'Período de Clases: Sábados del 11 de Julio al 31 de Octubre de 2026 | Acto de Graduación: 14 de Noviembre de 2026';
+        r2.value = 'Período de Clases: Sábados del 11 de Julio al 31 de Octubre de 2026 | Asueto: 07 de Noviembre | Graduación y Clausura: 14 de Noviembre de 2026';
         r2.font = { name: 'Segoe UI', size: 10, color: { argb: 'FFCBD5E1' } };
         r2.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.navyMedium) } };
         r2.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -786,7 +973,7 @@ async function exportarMatrizExcel() {
         // --- FILA 3: LEYENDA DE CONVENCIONES ---
         ws.mergeCells(3, 1, 3, totalCols);
         const r3 = ws.getCell('A3');
-        r3.value = 'Leyenda:  [ A ] Asistencia  |  [ P ] Permiso  |  [ F ] Falta  |  [ - ] No Aplica / Suspendido';
+        r3.value = 'Leyenda:  [ A ] Asistencia  |  [ P ] Permiso  |  [ F ] Falta  |  [ - ] No Aplica / Suspendido / Asueto';
         r3.font = { name: 'Segoe UI', size: 9, bold: true, italic: true, color: { argb: argb(PALETTE.slateMuted) } };
         r3.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.slateLight) } };
         r3.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -809,7 +996,7 @@ async function exportarMatrizExcel() {
 
         ws.mergeCells(4, 7, 4, totalCols);
         const g3 = ws.getCell('G4');
-        g3.value = 'CONTROL DE ASISTENCIAS POR SÁBADO (CLASES)';
+        g3.value = 'CONTROL DE ASISTENCIAS POR SÁBADO (CLASES, ASUETO Y GRADUACIÓN)';
         g3.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
         g3.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.navyDark) } };
         g3.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -818,7 +1005,7 @@ async function exportarMatrizExcel() {
         // --- FILA 5: ENCABEZADOS DE COLUMNAS ---
         const hCols = [
             { col: 1, title: 'N°', align: 'center', bg: PALETTE.headerBg, fg: PALETTE.slateDark },
-            { col: 2, title: 'APELLIDOS Y NOMBRES', align: 'left', bg: PALETTE.headerBg, fg: PALETTE.slateDark },
+            { col: 2, title: 'NOMBRES Y APELLIDOS', align: 'left', bg: PALETTE.headerBg, fg: PALETTE.slateDark },
             { col: 3, title: 'CÓDIGO', align: 'center', bg: PALETTE.headerBg, fg: PALETTE.slateDark },
             { col: 4, title: 'A', align: 'center', bg: PALETTE.badgeABg, fg: PALETTE.badgeATxt, bold: true },
             { col: 5, title: 'P', align: 'center', bg: PALETTE.badgePBg, fg: PALETTE.badgePTxt, bold: true },
@@ -838,8 +1025,16 @@ async function exportarMatrizExcel() {
             const colIndex = 7 + idx;
             const cell = ws.getCell(5, colIndex);
             cell.value = formatFechaHeader(f);
-            cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.navyDark) } };
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.headerBg) } };
+            if (f === '2026-11-07') {
+                cell.font = { name: 'Segoe UI', size: 9, bold: true, color: { argb: 'FF0284C7' } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0F2FE' } }; // Azul cielo suave asueto
+            } else if (f === '2026-11-14') {
+                cell.font = { name: 'Segoe UI', size: 9, bold: true, color: { argb: 'FFB45309' } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } }; // Dorado graduación
+            } else {
+                cell.font = { name: 'Segoe UI', size: 10, bold: true, color: { argb: argb(PALETTE.navyDark) } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: argb(PALETTE.headerBg) } };
+            }
             cell.alignment = { vertical: 'middle', horizontal: 'center' };
             cell.border = borderHeaderBottom;
         });
@@ -1138,7 +1333,10 @@ async function exportarMatrizExcel() {
         ws.getColumn(5).width = 8;   // P
         ws.getColumn(6).width = 8;   // F
         for (let c = 7; c <= totalCols; c++) {
-            ws.getColumn(c).width = 11; // Sábados
+            const f = fechas[c - 7];
+            if (f === '2026-11-07') ws.getColumn(c).width = 16;
+            else if (f === '2026-11-14') ws.getColumn(c).width = 20;
+            else ws.getColumn(c).width = 11;
         }
 
         // Asegurar que el panel inmovilizado inicie exactamente en D6 (evita duplicación de encabezados al subir)
@@ -1261,3 +1459,155 @@ window.cambiarEstadoUsuario = async function(emailTarget, nuevoEstado) {
     registrarLog(`${nuevoEstado ? 'Restauró' : 'Suspendió (Bloqueo)'} el acceso al sistema del correo: ${emailTarget}`);
     cargarUsuariosGodMode();
 };
+
+// =========================================================
+// 12. SIMULADOR DE ASISTENCIA GRADUACIÓN (PRUEBAS ADMIN)
+// =========================================================
+const modalSimulador = document.getElementById('modal-simulador-graduacion');
+const btnAbrirSimulador = document.getElementById('btn-simular-graduacion');
+const btnCerrarSimulador = document.getElementById('btn-cerrar-simulador');
+const btnEjecutarSimulacion = document.getElementById('btn-ejecutar-simulacion');
+const btnLimpiarSimulacion = document.getElementById('btn-limpiar-simulacion');
+const selectSimuladorDocente = document.getElementById('simulador-docente-select');
+const checkKioscoTest = document.getElementById('check-kiosco-test');
+const previewSimulador = document.getElementById('simulador-kiosco-preview');
+const msgSimulador = document.getElementById('simulador-msg');
+
+if (btnAbrirSimulador) {
+    btnAbrirSimulador.addEventListener('click', async () => {
+        if (!modalSimulador) return;
+        modalSimulador.classList.remove('hidden');
+        if (msgSimulador) msgSimulador.innerHTML = '';
+        if (previewSimulador) previewSimulador.classList.add('hidden');
+
+        // Sincronizar checkbox con localStorage
+        if (checkKioscoTest) {
+            checkKioscoTest.checked = localStorage.getItem('modo_prueba_graduacion') === 'true';
+        }
+
+        // Cargar lista de docentes en el selector
+        if (selectSimuladorDocente) {
+            selectSimuladorDocente.innerHTML = '<option value="">Cargando docentes...</option>';
+            const { data: docs } = await clienteSupabase.from('docentes').select('id, nombres, apellidos, pin, estado_activo').order('apellidos', { ascending: true });
+            if (docs && docs.length > 0) {
+                let htmlOptions = '';
+                docs.forEach(d => {
+                    const pinFmt = String(d.pin).padStart(3, '0');
+                    const estado = d.estado_activo ? '' : ' (INACTIVO)';
+                    htmlOptions += `<option value="${d.id}">${d.apellidos}, ${d.nombres} [PIN: ${pinFmt}]${estado}</option>`;
+                });
+                selectSimuladorDocente.innerHTML = htmlOptions;
+            } else {
+                selectSimuladorDocente.innerHTML = '<option value="">No hay docentes registrados</option>';
+            }
+        }
+    });
+}
+
+if (btnCerrarSimulador) {
+    btnCerrarSimulador.addEventListener('click', () => {
+        if (modalSimulador) modalSimulador.classList.add('hidden');
+    });
+}
+
+if (checkKioscoTest) {
+    checkKioscoTest.addEventListener('change', (e) => {
+        const activo = e.target.checked;
+        localStorage.setItem('modo_prueba_graduacion', activo ? 'true' : 'false');
+        if (msgSimulador) {
+            if (activo) {
+                msgSimulador.innerHTML = '<span style="color:#10b981; font-weight:bold;">✅ Modo prueba de Kiosco activado. Ahora puedes ir al Kiosco y digitar cualquier PIN hoy.</span>';
+            } else {
+                msgSimulador.innerHTML = '<span style="color:var(--slate-600);">Modo prueba desactivado. Kiosco vuelve a operar en horario regular.</span>';
+            }
+        }
+    });
+}
+
+if (btnEjecutarSimulacion) {
+    btnEjecutarSimulacion.addEventListener('click', async () => {
+        if (!selectSimuladorDocente || !selectSimuladorDocente.value) {
+            alert("Por favor seleccione un docente de la lista.");
+            return;
+        }
+
+        const docenteId = parseInt(selectSimuladorDocente.value, 10);
+        const docenteTexto = selectSimuladorDocente.options[selectSimuladorDocente.selectedIndex].text;
+        const nombreDocente = docenteTexto.split('[PIN:')[0].trim();
+
+        btnEjecutarSimulacion.disabled = true;
+        btnEjecutarSimulacion.textContent = "⏳ Guardando en la Base de Datos...";
+
+        try {
+            const ahora = new Date();
+            const horaStr = ahora.toTimeString().split(' ')[0];
+            const horaAmigable = ahora.toLocaleTimeString('es-SV', { hour: '2-digit', minute: '2-digit', hour12: true });
+
+            // 1. Eliminar asistencia previa en caso de que ya se haya probado para no generar duplicados
+            await clienteSupabase.from('asistencias').delete().eq('docente_id', docenteId).eq('fecha', '2026-11-14');
+
+            // 2. Insertar asistencia en Supabase exactamente como lo hace el Kiosco
+            const { error } = await clienteSupabase.from('asistencias').insert([{
+                docente_id: docenteId,
+                estado: 'asistio',
+                fecha: '2026-11-14',
+                hora: horaStr
+            }]);
+
+            if (error) {
+                if (msgSimulador) msgSimulador.innerHTML = `<span style="color:#ef4444; font-weight:bold;">Error en Supabase: ${error.message}</span>`;
+            } else {
+                // 3. Activar efectos visuales y sonoros
+                emitirSonido('graduacion');
+                lanzarSerpentinas();
+
+                // 4. Mostrar tarjeta de éxito simulada
+                if (previewSimulador) {
+                    document.getElementById('simulador-preview-nombre').innerHTML = `🎓 ¡Felicidades! ${nombreDocente} 🎓<br><span style="font-size:13px; font-weight:normal; opacity:0.95;">Asistencia de Graduación Registrada</span>`;
+                    document.getElementById('simulador-preview-hora').textContent = `Entrada: ${horaAmigable} | Sábado 14 de Noviembre`;
+                    previewSimulador.classList.remove('hidden');
+                }
+
+                if (msgSimulador) {
+                    msgSimulador.innerHTML = `<span style="color:#10b981; font-weight:bold;">✅ ¡Guardado con éxito en la BD (tabla 'asistencias') y reflejado en la matriz!</span>`;
+                }
+
+                registrarLog(`Simuló asistencia de GRADUACIÓN para: ${nombreDocente}`);
+
+                // 5. Refrescar la matriz general en vivo
+                generarReporte();
+            }
+        } catch (err) {
+            console.error("Error al simular asistencia:", err);
+            if (msgSimulador) msgSimulador.innerHTML = `<span style="color:#ef4444;">Error: ${err.message}</span>`;
+        } finally {
+            btnEjecutarSimulacion.disabled = false;
+            btnEjecutarSimulacion.textContent = "🎉 Simular Asistencia y Ver Animación";
+        }
+    });
+}
+
+if (btnLimpiarSimulacion) {
+    btnLimpiarSimulacion.addEventListener('click', async () => {
+        if (!selectSimuladorDocente || !selectSimuladorDocente.value) {
+            alert("Seleccione el docente cuyo registro de prueba desea eliminar.");
+            return;
+        }
+
+        const docenteId = parseInt(selectSimuladorDocente.value, 10);
+        btnLimpiarSimulacion.disabled = true;
+        btnLimpiarSimulacion.textContent = "Borrando de BD...";
+
+        try {
+            await clienteSupabase.from('asistencias').delete().eq('docente_id', docenteId).eq('fecha', '2026-11-14');
+            if (previewSimulador) previewSimulador.classList.add('hidden');
+            if (msgSimulador) msgSimulador.innerHTML = `<span style="color:#f59e0b; font-weight:bold;">🗑️ Registro del 14-Nov eliminado de la BD. Matriz restablecida.</span>`;
+            generarReporte();
+        } catch (err) {
+            if (msgSimulador) msgSimulador.innerHTML = `<span style="color:#ef4444;">Error al borrar: ${err.message}</span>`;
+        } finally {
+            btnLimpiarSimulacion.disabled = false;
+            btnLimpiarSimulacion.textContent = "🗑️ Borrar Prueba del 14-Nov";
+        }
+    });
+}
