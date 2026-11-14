@@ -414,7 +414,16 @@ async function verificarPIN() {
     const fechaLocal = `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
     
     if (ahora.getDay() !== 6) { emitirSonido('error'); mostrarAlerta(statusMsg, "Solo sábados.", "#ef4444", "white"); pinInput.value = ""; pinInput.focus(); return; }
-    if (ahora.getHours() < 6 || ahora.getHours() >= 13) { emitirSonido('error'); mostrarAlerta(statusMsg, "Horario finalizado (6 AM - 1 PM).", "#ef4444", "white"); pinInput.value = ""; pinInput.focus(); return; }
+    
+    const esGraduacion = fechaLocal === '2026-11-14';
+    const horaLimite = esGraduacion ? 21 : 13;
+    if (ahora.getHours() < 6 || ahora.getHours() >= horaLimite) { 
+        emitirSonido('error'); 
+        mostrarAlerta(statusMsg, esGraduacion ? "Horario de Graduación finalizado (6 AM - 9 PM)." : "Horario finalizado (6 AM - 1 PM).", "#ef4444", "white"); 
+        pinInput.value = ""; 
+        pinInput.focus(); 
+        return; 
+    }
 
     const { data: diaSusp } = await clienteSupabase.from('dias_suspendidos').select('fecha').eq('fecha', fechaLocal);
     if ((diaSusp && diaSusp.length > 0) || fechaLocal === '2026-11-07') { emitirSonido('error'); mostrarAlerta(statusMsg, "Clases suspendidas (Asueto).", "#f59e0b", "white"); pinInput.value = ""; pinInput.focus(); return; }
@@ -647,7 +656,7 @@ async function generarReporte() {
     if(!cont) return;
     cont.innerHTML = "<p style='padding: 20px; font-weight: 600; color: var(--slate-500);'>Cargando registros...</p>";
 
-    const { data: docentes } = await clienteSupabase.from('docentes').select('*').order('nombres', { ascending: true });
+    const { data: docentes } = await clienteSupabase.from('docentes').select('*').order('apellidos', { ascending: true });
     const { data: asistencias } = await clienteSupabase.from('asistencias').select('*');
     const { data: diasSusp } = await clienteSupabase.from('dias_suspendidos').select('fecha');
     if (!docentes) { cont.innerHTML = "<p style='color:red;'>Error.</p>"; return; }
@@ -714,7 +723,7 @@ async function generarReporte() {
                 const titleBadge = fecha === '2026-11-07' ? 'Asueto (Día Libre)' : 'Suspendido';
                 celdasFechas += `<td class="${fecha === sabadoObjetivo ? 'celda-actual' : ''}"><span class="badge-suspendida" title="${titleBadge}">-</span></td>`; 
             } else {
-                celdasFechas += `<td class="${fecha === sabadoObjetivo ? 'celda-actual' : ''}"><select class="select-asistencia ${cls}" data-fecha="${fecha}" onchange="cambiarEstadoCelda(${doc.id}, '${doc.nombres} ${doc.apellidos}', '${fecha}', this.value, this)" ${!doc.estado_activo ? 'disabled' : ''}><option value="pendiente" ${val === 'pendiente' ? 'selected' : ''}>-</option><option value="asistio" ${val === 'asistio' ? 'selected' : ''}>A</option><option value="permiso" ${val === 'permiso' ? 'selected' : ''}>P</option><option value="falta" ${val === 'falta' ? 'selected' : ''}>F</option></select></td>`;
+                celdasFechas += `<td class="${fecha === sabadoObjetivo ? 'celda-actual' : ''}"><select class="select-asistencia ${cls}" data-fecha="${fecha}" onchange="cambiarEstadoCelda(${doc.id}, '${doc.apellidos}, ${doc.nombres}', '${fecha}', this.value, this)" ${!doc.estado_activo ? 'disabled' : ''}><option value="pendiente" ${val === 'pendiente' ? 'selected' : ''}>-</option><option value="asistio" ${val === 'asistio' ? 'selected' : ''}>A</option><option value="permiso" ${val === 'permiso' ? 'selected' : ''}>P</option><option value="falta" ${val === 'falta' ? 'selected' : ''}>F</option></select></td>`;
             }
         });
 
@@ -724,7 +733,7 @@ async function generarReporte() {
         let warningIcon = "";
         if (rachaFaltas >= 3 && doc.estado_activo !== false) { rowClasses += " alerta-faltas"; warningIcon = `<span class="icon-alerta" title="${rachaFaltas} faltas consecutivas">⚠️</span>`; }
 
-        const nombreCompleto = `${doc.nombres} ${doc.apellidos}`;
+        const nombreCompleto = `${doc.apellidos}, ${doc.nombres}`;
         html += `<tr class="${rowClasses}">
             <td class="col-fija fix-1">${i + 1}</td>
             <td class="col-fija fix-2" title="${nombreCompleto}"><div style="display: flex; justify-content: space-between; align-items: center; width: 100%;"><span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${nombreCompleto}${warningIcon}</span>${badgeInactivo}</div></td>
@@ -1005,7 +1014,7 @@ async function exportarMatrizExcel() {
         // --- FILA 5: ENCABEZADOS DE COLUMNAS ---
         const hCols = [
             { col: 1, title: 'N°', align: 'center', bg: PALETTE.headerBg, fg: PALETTE.slateDark },
-            { col: 2, title: 'NOMBRES Y APELLIDOS', align: 'left', bg: PALETTE.headerBg, fg: PALETTE.slateDark },
+            { col: 2, title: 'APELLIDOS Y NOMBRES', align: 'left', bg: PALETTE.headerBg, fg: PALETTE.slateDark },
             { col: 3, title: 'CÓDIGO', align: 'center', bg: PALETTE.headerBg, fg: PALETTE.slateDark },
             { col: 4, title: 'A', align: 'center', bg: PALETTE.badgeABg, fg: PALETTE.badgeATxt, bold: true },
             { col: 5, title: 'P', align: 'center', bg: PALETTE.badgePBg, fg: PALETTE.badgePTxt, bold: true },
@@ -1460,154 +1469,4 @@ window.cambiarEstadoUsuario = async function(emailTarget, nuevoEstado) {
     cargarUsuariosGodMode();
 };
 
-// =========================================================
-// 12. SIMULADOR DE ASISTENCIA GRADUACIÓN (PRUEBAS ADMIN)
-// =========================================================
-const modalSimulador = document.getElementById('modal-simulador-graduacion');
-const btnAbrirSimulador = document.getElementById('btn-simular-graduacion');
-const btnCerrarSimulador = document.getElementById('btn-cerrar-simulador');
-const btnEjecutarSimulacion = document.getElementById('btn-ejecutar-simulacion');
-const btnLimpiarSimulacion = document.getElementById('btn-limpiar-simulacion');
-const selectSimuladorDocente = document.getElementById('simulador-docente-select');
-const checkKioscoTest = document.getElementById('check-kiosco-test');
-const previewSimulador = document.getElementById('simulador-kiosco-preview');
-const msgSimulador = document.getElementById('simulador-msg');
 
-if (btnAbrirSimulador) {
-    btnAbrirSimulador.addEventListener('click', async () => {
-        if (!modalSimulador) return;
-        modalSimulador.classList.remove('hidden');
-        if (msgSimulador) msgSimulador.innerHTML = '';
-        if (previewSimulador) previewSimulador.classList.add('hidden');
-
-        // Sincronizar checkbox con localStorage
-        if (checkKioscoTest) {
-            checkKioscoTest.checked = localStorage.getItem('modo_prueba_graduacion') === 'true';
-        }
-
-        // Cargar lista de docentes en el selector
-        if (selectSimuladorDocente) {
-            selectSimuladorDocente.innerHTML = '<option value="">Cargando docentes...</option>';
-            const { data: docs } = await clienteSupabase.from('docentes').select('id, nombres, apellidos, pin, estado_activo').order('apellidos', { ascending: true });
-            if (docs && docs.length > 0) {
-                let htmlOptions = '';
-                docs.forEach(d => {
-                    const pinFmt = String(d.pin).padStart(3, '0');
-                    const estado = d.estado_activo ? '' : ' (INACTIVO)';
-                    htmlOptions += `<option value="${d.id}">${d.apellidos}, ${d.nombres} [PIN: ${pinFmt}]${estado}</option>`;
-                });
-                selectSimuladorDocente.innerHTML = htmlOptions;
-            } else {
-                selectSimuladorDocente.innerHTML = '<option value="">No hay docentes registrados</option>';
-            }
-        }
-    });
-}
-
-if (btnCerrarSimulador) {
-    btnCerrarSimulador.addEventListener('click', () => {
-        if (modalSimulador) modalSimulador.classList.add('hidden');
-    });
-}
-
-if (checkKioscoTest) {
-    checkKioscoTest.addEventListener('change', (e) => {
-        const activo = e.target.checked;
-        localStorage.setItem('modo_prueba_graduacion', activo ? 'true' : 'false');
-        if (msgSimulador) {
-            if (activo) {
-                msgSimulador.innerHTML = '<span style="color:#10b981; font-weight:bold;">✅ Modo prueba de Kiosco activado. Ahora puedes ir al Kiosco y digitar cualquier PIN hoy.</span>';
-            } else {
-                msgSimulador.innerHTML = '<span style="color:var(--slate-600);">Modo prueba desactivado. Kiosco vuelve a operar en horario regular.</span>';
-            }
-        }
-    });
-}
-
-if (btnEjecutarSimulacion) {
-    btnEjecutarSimulacion.addEventListener('click', async () => {
-        if (!selectSimuladorDocente || !selectSimuladorDocente.value) {
-            alert("Por favor seleccione un docente de la lista.");
-            return;
-        }
-
-        const docenteId = parseInt(selectSimuladorDocente.value, 10);
-        const docenteTexto = selectSimuladorDocente.options[selectSimuladorDocente.selectedIndex].text;
-        const nombreDocente = docenteTexto.split('[PIN:')[0].trim();
-
-        btnEjecutarSimulacion.disabled = true;
-        btnEjecutarSimulacion.textContent = "⏳ Guardando en la Base de Datos...";
-
-        try {
-            const ahora = new Date();
-            const horaStr = ahora.toTimeString().split(' ')[0];
-            const horaAmigable = ahora.toLocaleTimeString('es-SV', { hour: '2-digit', minute: '2-digit', hour12: true });
-
-            // 1. Eliminar asistencia previa en caso de que ya se haya probado para no generar duplicados
-            await clienteSupabase.from('asistencias').delete().eq('docente_id', docenteId).eq('fecha', '2026-11-14');
-
-            // 2. Insertar asistencia en Supabase exactamente como lo hace el Kiosco
-            const { error } = await clienteSupabase.from('asistencias').insert([{
-                docente_id: docenteId,
-                estado: 'asistio',
-                fecha: '2026-11-14',
-                hora: horaStr
-            }]);
-
-            if (error) {
-                if (msgSimulador) msgSimulador.innerHTML = `<span style="color:#ef4444; font-weight:bold;">Error en Supabase: ${error.message}</span>`;
-            } else {
-                // 3. Activar efectos visuales y sonoros
-                emitirSonido('graduacion');
-                lanzarSerpentinas();
-
-                // 4. Mostrar tarjeta de éxito simulada
-                if (previewSimulador) {
-                    document.getElementById('simulador-preview-nombre').innerHTML = `🎓 ¡Felicidades! ${nombreDocente} 🎓<br><span style="font-size:13px; font-weight:normal; opacity:0.95;">Asistencia de Graduación Registrada</span>`;
-                    document.getElementById('simulador-preview-hora').textContent = `Entrada: ${horaAmigable} | Sábado 14 de Noviembre`;
-                    previewSimulador.classList.remove('hidden');
-                }
-
-                if (msgSimulador) {
-                    msgSimulador.innerHTML = `<span style="color:#10b981; font-weight:bold;">✅ ¡Guardado con éxito en la BD (tabla 'asistencias') y reflejado en la matriz!</span>`;
-                }
-
-                registrarLog(`Simuló asistencia de GRADUACIÓN para: ${nombreDocente}`);
-
-                // 5. Refrescar la matriz general en vivo
-                generarReporte();
-            }
-        } catch (err) {
-            console.error("Error al simular asistencia:", err);
-            if (msgSimulador) msgSimulador.innerHTML = `<span style="color:#ef4444;">Error: ${err.message}</span>`;
-        } finally {
-            btnEjecutarSimulacion.disabled = false;
-            btnEjecutarSimulacion.textContent = "🎉 Simular Asistencia y Ver Animación";
-        }
-    });
-}
-
-if (btnLimpiarSimulacion) {
-    btnLimpiarSimulacion.addEventListener('click', async () => {
-        if (!selectSimuladorDocente || !selectSimuladorDocente.value) {
-            alert("Seleccione el docente cuyo registro de prueba desea eliminar.");
-            return;
-        }
-
-        const docenteId = parseInt(selectSimuladorDocente.value, 10);
-        btnLimpiarSimulacion.disabled = true;
-        btnLimpiarSimulacion.textContent = "Borrando de BD...";
-
-        try {
-            await clienteSupabase.from('asistencias').delete().eq('docente_id', docenteId).eq('fecha', '2026-11-14');
-            if (previewSimulador) previewSimulador.classList.add('hidden');
-            if (msgSimulador) msgSimulador.innerHTML = `<span style="color:#f59e0b; font-weight:bold;">🗑️ Registro del 14-Nov eliminado de la BD. Matriz restablecida.</span>`;
-            generarReporte();
-        } catch (err) {
-            if (msgSimulador) msgSimulador.innerHTML = `<span style="color:#ef4444;">Error al borrar: ${err.message}</span>`;
-        } finally {
-            btnLimpiarSimulacion.disabled = false;
-            btnLimpiarSimulacion.textContent = "🗑️ Borrar Prueba del 14-Nov";
-        }
-    });
-}
